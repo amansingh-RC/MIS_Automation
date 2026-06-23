@@ -15,11 +15,6 @@ import streamlit as st
 
 _LOGO_PATH = Path(__file__).parent / "assets" / "royal_chain_logo.png"
 
-GOLD = "#C9A84C"
-GOLD_LIGHT = "#F0D080"
-NAVY = "#0D1B3E"
-TEXT_MUTED = "#8899BB"
-
 _CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');

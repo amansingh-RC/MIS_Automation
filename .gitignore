@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Generated / uploaded report files
+*_processed.xlsx
+*_OUTPUT.xlsx
+RCL_Scrap_Stock_*.xlsx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

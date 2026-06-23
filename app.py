@@ -1,17 +1,3 @@
-"""
-Streamlit web app for Royal Chain MIS report automation.
-
-Run with:
-    streamlit run app.py
-
-Tools:
-  1. Loss Report   -> upload raw export, get the formatted Loss Report sheet.
-  2. Scrap + Stock -> upload one daily export, get one workbook with two sheets.
-
-Adding a new tool later: write a render_<name>_tab() function and add one line
-to the TABS list at the bottom.
-"""
-
 from __future__ import annotations
 
 from datetime import date
@@ -33,10 +19,6 @@ ui.render_header()
 XLSX_MIME = ("application/vnd.openxmlformats-officedocument"
              ".spreadsheetml.sheet")
 
-
-# ===========================================================================
-# Tab — Loss Report
-# ===========================================================================
 def render_loss_tab() -> None:
     ui.section_title(
         "Loss Report",
@@ -86,10 +68,6 @@ def render_loss_tab() -> None:
             f"⬇  Download {out_name}", data=out_bytes, file_name=out_name,
             mime=XLSX_MIME, key="loss_dl_" + file.name)
 
-
-# ===========================================================================
-# Tab — Scrap + Stock (one input -> one workbook with two sheets)
-# ===========================================================================
 def render_scrap_stock_tab() -> None:
     ui.section_title(
         "Scrap + Stock Report",
@@ -144,9 +122,6 @@ def render_scrap_stock_tab() -> None:
         file_name=out_name, mime=XLSX_MIME, key="ss_dl")
 
 
-# ===========================================================================
-# Tab registry — add a (label, render_fn) tuple here to add a new tool.
-# ===========================================================================
 TABS = [
     ("📉  Loss Report", render_loss_tab),
     ("♻️  Scrap + Stock", render_scrap_stock_tab),

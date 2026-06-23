@@ -1,12 +1,3 @@
-"""
-Scrap + Stock daily reports.
-
-Both reports read the SAME raw export (first sheet) but apply different logic.
-This module is a faithful Python port of the two browser tools
-(RCL_SCRAP_REPORT_TOOL.html and RCL_STOCK_REPORT_DAILY_TOOL.html) and produces
-one workbook with two sheets: "SCRAP REPORT" and "STOCK REPORT".
-"""
-
 from __future__ import annotations
 
 import io
@@ -16,14 +7,8 @@ from collections import OrderedDict
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
 
 from loss_report import LossReportError, _looks_like_xls
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
 
 def _grid_first_sheet(file_bytes: bytes) -> list[list]:
     """First sheet as a list of rows (matches JS wb.SheetNames[0])."""
@@ -82,10 +67,6 @@ def _find_header_row(grid: list[list], marker: str) -> int:
     return -1
 
 
-# ---------------------------------------------------------------------------
-# SCRAP report
-# ---------------------------------------------------------------------------
-
 def process_scrap(grid: list[list]) -> dict:
     header_row = _find_header_row(grid, "Stock Status")
     if header_row == -1:
@@ -120,16 +101,12 @@ def process_scrap(grid: list[list]) -> dict:
     if not rows:
         raise LossReportError("Scrap report: no SCRAP / HL-SCRAP rows found.")
 
-    groups = _group_and_sum(rows, dedup_upper=False)
+    groups = _group_and_sum(rows)
     total_gross = sum(r["gross"] for r in rows)
     total_metal = sum(r["metal"] for r in rows)
     return {"groups": groups, "total_gross": total_gross,
             "total_metal": total_metal, "row_count": len(rows)}
 
-
-# ---------------------------------------------------------------------------
-# STOCK report
-# ---------------------------------------------------------------------------
 
 _EXCLUDE_ITEMS = {
     "ALLOY", "BEADS (GMS)", "COLOR STONE(GMS)", "CZ(GMS)",
@@ -228,13 +205,11 @@ def process_stock(grid: list[list]) -> dict:
             "total_rows": total_rows, "filtered_rows": filtered_rows}
 
 
-def _group_and_sum(rows: list[dict], dedup_upper: bool) -> "OrderedDict[str, list]":
+def _group_and_sum(rows: list[dict]) -> "OrderedDict[str, list]":
     """Group rows by (wcgroup, wcname), summing weights; sorted output."""
     merged: dict[str, dict] = {}
     for r in rows:
         key = r["wcgroup"] + "|||" + r["wcname"]
-        if dedup_upper:
-            key = key.upper()
         if key not in merged:
             merged[key] = {"wcgroup": r["wcgroup"], "wcname": r["wcname"],
                            "gross": 0.0, "metal": 0.0}
@@ -248,10 +223,6 @@ def _group_and_sum(rows: list[dict], dedup_upper: bool) -> "OrderedDict[str, lis
         groups.setdefault(e["wcgroup"], []).append(e)
     return groups
 
-
-# ---------------------------------------------------------------------------
-# Combined workbook
-# ---------------------------------------------------------------------------
 
 _NUM_FMT = "#,##0.000"
 _TITLE_FONT = Font(bold=True, size=14)
@@ -297,7 +268,6 @@ def _write_data_rows(ws, groups, total_gross, total_metal, first_data_row):
 def build_combined_workbook(scrap: dict, stock: dict, today: str) -> bytes:
     wb = openpyxl.Workbook()
 
-    # --- Sheet 1: SCRAP REPORT ----------------------------------------------
     ws = wb.active
     ws.title = "SCRAP REPORT"
     ws.append(["ROYAL CHAIN LIMITED"])
@@ -316,7 +286,6 @@ def build_combined_workbook(scrap: dict, stock: dict, today: str) -> bytes:
     for col, w in zip("ABCD", (30, 30, 22, 22)):
         ws.column_dimensions[col].width = w
 
-    # --- Sheet 2: STOCK REPORT ----------------------------------------------
     ws2 = wb.create_sheet("STOCK REPORT")
     ws2.append(["ROYAL CHAIN LIMITED"])
     ws2.append(["Daily Stock Report — Group-wise Summary"])

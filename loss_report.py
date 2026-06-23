@@ -1,22 +1,3 @@
-"""
-Core logic for the Monthly Loss Report automation.
-
-Takes the raw "Monthly Loss Report Summary" export (.xls or .xlsx) and produces
-a single clean sheet that matches the target "Loss Report Summary" layout:
-
-  * columns reordered (Scrap before Sample),
-  * a title row + a date band (dates read from the export's preamble),
-  * the totals row (blank Wc Name) dropped,
-  * a yellow spacer column,
-  * two new columns -- FINAL LOSS and LOSS % -- written as live Excel formulas.
-
-Formulas (matching the target file)
------------------------------------
-FINAL LOSS = Loss Quantity Pg + Gain Pg                      ->  =G{r}+H{r}
-LOSS %     = FINAL LOSS / (Process + Unutilized + Scrap      ->  =K{r}/(C{r}+D{r}+E{r}+F{r})
-                           + Sample)
-"""
-
 from __future__ import annotations
 
 import io
@@ -38,11 +19,6 @@ class ParsedReport:
     rows: list[dict]          # {Wc Name, Final Loss, Loss %} per data row
     date_from: str
     date_to: str
-
-
-# ---------------------------------------------------------------------------
-# Reading the source workbook into a plain grid
-# ---------------------------------------------------------------------------
 
 def _looks_like_xls(file_bytes: bytes) -> bool:
     """Legacy .xls files are OLE2 documents (magic D0 CF 11 E0).
@@ -78,10 +54,6 @@ def _grid_from_bytes(file_bytes: bytes) -> list[list]:
     ws = wb.active
     return [list(row) for row in ws.iter_rows(values_only=True)]
 
-
-# ---------------------------------------------------------------------------
-# Column detection
-# ---------------------------------------------------------------------------
 
 def _norm(value) -> str:
     if value is None:
@@ -157,11 +129,6 @@ def _extract_dates(grid: list[list]) -> tuple[str, str]:
     fmt = lambda m: m.group(1).replace("/", "-") if m else ""
     return fmt(m_from), fmt(m_to)
 
-
-# ---------------------------------------------------------------------------
-# Output workbook (reproduces the target "Loss Report Summary" sheet)
-# ---------------------------------------------------------------------------
-
 OUTPUT_COLUMNS = [
     ("wc_name", "Wc Name"),
     ("issue", "Issue Quantity Pg"),
@@ -183,7 +150,7 @@ _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _GRAY = PatternFill("solid", fgColor=Color(theme=0, tint=-0.249977111117893))
 _ORANGE = PatternFill("solid", fgColor="FFFFC000")
 _YELLOW = PatternFill("solid", fgColor="FFFFFF00")
-# Accounting-style format that hides zeros (matches the target file).
+
 _DATA_FMT = '[$-10409]#,##0.00;\\(#,##0.00\\);""'
 _FINAL_FMT = "0.00"
 _PCT_FMT = "0.000%"
@@ -224,14 +191,12 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
     ws.title = "Loss Report Summary"
     last_letter = get_column_letter(_LAST_COL)
 
-    # --- Row 1: title --------------------------------------------------------
     ws.merge_cells(f"A1:{last_letter}1")
     t = ws["A1"]
     t.value = "Loss Report Summary"
     t.font = Font(name=_FONT, bold=True, size=20)
     t.alignment = _center()
 
-    # --- Row 2: date band (A2:G2 and H2:L2) ---------------------------------
     ws.merge_cells("A2:G2")
     ws.merge_cells("H2:L2")
     left = ws["A2"]
@@ -242,7 +207,6 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
         cell.font = Font(name=_FONT, bold=True, size=14)
         cell.alignment = _center()
 
-    # --- Row 3: headers ------------------------------------------------------
     hr = 3
     for idx, (_field, label) in enumerate(OUTPUT_COLUMNS, start=1):
         cell = ws.cell(row=hr, column=idx, value=label)
@@ -260,7 +224,6 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
         cell.fill = _ORANGE
         cell.border = _BORDER
 
-    # --- Data rows -----------------------------------------------------------
     preview: list[dict] = []
     out_row = hr + 1
     for r in range(header_row + 1, len(grid)):
@@ -276,7 +239,6 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
                 ("issue", "process", "unutilized", "scrap", "sample",
                  "loss", "gain", "bal")}
 
-        # Skip the totals row (blank name) and any fully-empty rows.
         if not name or all(v is None for v in nums.values()):
             continue
 
@@ -333,7 +295,6 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
     if not preview:
         raise LossReportError("Found the header but no data rows to process.")
 
-    # --- Dimensions ----------------------------------------------------------
     for col, width in _COL_WIDTHS.items():
         ws.column_dimensions[get_column_letter(col)].width = width
     ws.row_dimensions[1].height = 25.5
