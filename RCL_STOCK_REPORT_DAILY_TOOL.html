@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Royal Chain Limited – Daily Stock Report Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --navy:       #0A2240;
+  --navy-mid:   #0D2B52;
+  --navy-light: #1A3A6B;
+  --blue-sky:   #2980B9;
+  --blue-light: #D6EAF8;
+  --blue-pale:  #EBF5FB;
+  --blue-mid:   #AED6F1;
+  --gold:       #C9A84C;
+  --gold-light: #F0D080;
+  --gold-dark:  #9A7A2E;
+  --gold-pale:  #FEF9EC;
+  --white:      #FFFFFF;
+  --text-dark:  #0A2240;
+  --text-mid:   #2C3E50;
+  --text-muted: #5D8AA8;
+  --success:    #27AE60;
+  --border:     #AED6F1;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: linear-gradient(135deg, #EBF5FB 0%, #D6EAF8 40%, #F0F8FF 70%, #FEF9EC 100%);
+  color: var(--text-dark);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+/* ─── HEADER ─── */
+.header {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 60%, #163A6E 100%);
+  padding: 0;
+  box-shadow: 0 4px 24px rgba(10,34,64,0.35);
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content:'';
+  position:absolute; inset:0;
+  background: repeating-linear-gradient(
+    60deg, transparent, transparent 40px,
+    rgba(201,168,76,0.04) 40px, rgba(201,168,76,0.04) 41px
+  );
+}
+.header-inner {
+  position:relative; z-index:1;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 36px;
+}
+
+/* SVG Logo */
+.logo-wrap { flex-shrink:0; }
+
+.logo-svg { width:74px; height:74px; }
+
+.header-text { flex:1; }
+
+.company-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold-light);
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.company-tagline {
+  font-size: 11.5px;
+  letter-spacing: 0.28em;
+  color: var(--blue-mid);
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-top: 3px;
+}
+.tool-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  margin-top: 10px;
+  font-style: italic;
+}
+
+.header-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+.date-badge {
+  background: rgba(201,168,76,0.15);
+  border: 1px solid rgba(201,168,76,0.4);
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: var(--gold-light);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* Gold rule below header */
+.gold-rule {
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--gold), var(--gold-light), var(--gold), transparent);
+}
+
+/* ─── MAIN ─── */
+.container { max-width: 1140px; margin: 0 auto; padding: 32px 28px 60px; }
+
+/* ─── RULES PANEL ─── */
+.rules-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 2px 12px rgba(41,128,185,0.08);
+}
+.rules-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 14px;
+  color: var(--navy);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.rule-chip {
+  background: var(--blue-pale);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+.rule-chip-title {
+  font-weight: 700;
+  color: var(--navy);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.rule-chip-desc { color: var(--text-mid); font-size: 12px; line-height: 1.5; }
+
+.tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+  margin: 1px 2px;
+  vertical-align: middle;
+}
+.tag-remove { background: #FDEDEC; border: 1px solid #E74C3C; color: #C0392B; }
+.tag-keep   { background: #EAFAF1; border: 1px solid #27AE60; color: #1E8449; }
+.tag-auto   { background: var(--gold-pale); border: 1px solid var(--gold); color: var(--gold-dark); }
+
+/* ─── UPLOAD ─── */
+.upload-zone {
+  border: 2.5px dashed var(--blue-sky);
+  border-radius: 16px;
+  padding: 50px 30px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--white);
+  transition: all 0.3s;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.upload-zone::before {
+  content:'';
+  position:absolute; inset:0;
+  background: radial-gradient(ellipse at center, rgba(41,128,185,0.04), transparent 70%);
+  opacity:0; transition: opacity 0.3s;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--gold);
+  background: var(--gold-pale);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(201,168,76,0.15);
+}
+.upload-zone:hover::before, .upload-zone.drag-over::before { opacity:1; }
+.upload-zone svg { margin-bottom: 14px; }
+.upload-label {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+.upload-hint { font-size: 13px; color: var(--text-muted); }
+#fileInput { display:none; }
+
+.file-pill {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #EAFAF1;
+  border: 1px solid #27AE60;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--success);
+  margin-bottom: 16px;
+}
+.file-pill.visible { display: flex; }
+.file-pill-name { flex:1; }
+.file-pill-size { font-weight:400; color: #58D68D; font-size: 12px; }
+
+/* ─── PROCESS BUTTON ─── */
+.process-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  color: var(--gold-light);
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+}
+.process-btn::after {
+  content:'';
+  position:absolute; top:0; left:-100%; width:100%; height:100%;
+  background: linear-gradient(90deg, transparent, rgba(240,208,128,0.15), transparent);
+  transition: left 0.5s;
+}
+.process-btn:hover { box-shadow: 0 6px 28px rgba(10,34,64,0.3); transform: translateY(-1px); }
+.process-btn:hover::after { left:100%; }
+.process-btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; box-shadow:none; }
+
+/* ─── SUMMARY CARDS ─── */
+.cards-wrap {
+  display: none;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin: 28px 0;
+}
+.cards-wrap.visible { display: grid; }
+
+.card {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 20px 18px;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(41,128,185,0.09);
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:3px;
+}
+.card.c-blue::before  { background: linear-gradient(90deg, var(--blue-sky), var(--blue-mid)); }
+.card.c-gold::before  { background: linear-gradient(90deg, var(--gold), var(--gold-light)); }
+.card.c-navy::before  { background: linear-gradient(90deg, var(--navy), var(--navy-light)); }
+.card.c-green::before { background: linear-gradient(90deg, #27AE60, #58D68D); }
+
+.card-icon { font-size: 22px; margin-bottom: 8px; display:block; }
+.card-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 6px; }
+.card-val { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--navy); }
+.card-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+/* ─── TABLE SECTION ─── */
+.table-section { display:none; }
+.table-section.visible { display:block; }
+
+.table-bar {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom: 14px; flex-wrap:wrap; gap:12px;
+}
+.table-bar-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  color: var(--navy);
+  font-weight: 700;
+}
+.table-bar-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+.dl-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  border: none;
+  border-radius: 9px;
+  color: var(--navy);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-transform: uppercase;
+}
+.dl-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(201,168,76,0.4); }
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(41,128,185,0.1);
+}
+
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+
+thead th {
+  background: var(--navy);
+  color: var(--gold-light);
+  font-family: 'Playfair Display', serif;
+  font-size: 12px;
+  letter-spacing: 0.07em;
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 2px solid var(--gold);
+  position: sticky; top:0; z-index:2;
+  white-space:nowrap;
+}
+thead th:nth-child(n+3) { text-align:right; }
+
+tbody tr { border-bottom: 1px solid #D6EAF8; transition: background 0.15s; }
+tbody tr:nth-child(even)  { background: var(--blue-pale); }
+tbody tr:nth-child(odd)   { background: var(--white); }
+tbody tr:hover { background: #FEF9EC !important; }
+
+tbody td { padding: 10px 16px; color: var(--text-dark); font-weight: 500; }
+tbody td:nth-child(n+3) { text-align:right; font-weight:600; font-variant-numeric: tabular-nums; }
+
+.row-total { background: linear-gradient(90deg, var(--navy-mid), var(--navy)) !important; border-top: 1px solid var(--gold) !important; border-bottom: 1px solid var(--gold) !important; }
+.row-total td { color: var(--gold-light) !important; font-weight:700; font-size:13px; padding: 9px 16px; }
+
+.row-grand { background: var(--navy) !important; border-top: 2px solid var(--gold) !important; }
+.row-grand td { color: var(--gold-light) !important; font-family: 'Playfair Display', serif; font-size:14px; font-weight:700; padding: 13px 16px; }
+
+.row-sumgw { background: var(--gold-pale) !important; border-top: 1px solid var(--gold) !important; }
+.row-sumgw td { color: var(--navy) !important; font-family: 'Playfair Display', serif; font-size:13px; font-weight:700; padding: 12px 16px; }
+
+/* ─── FOOTER ─── */
+.footer {
+  text-align:center;
+  margin-top: 44px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+.footer strong { color: var(--gold-dark); }
+
+/* ─── SPINNER ─── */
+.spinner {
+  width:18px; height:18px;
+  border: 2.5px solid rgba(240,208,128,0.3);
+  border-top-color: var(--gold-light);
+  border-radius:50%;
+  animation: spin 0.7s linear infinite;
+  display:inline-block;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(14px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.fade-up { animation: fadeUp 0.4s ease forwards; }
+
+@media (max-width:700px) {
+  .header-inner { flex-direction:column; text-align:center; }
+  .header-right { text-align:center; }
+  .rules-grid { grid-template-columns: repeat(2,1fr); }
+  .cards-wrap { grid-template-columns:repeat(2,1fr); }
+  .company-name { font-size:22px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<div class="header">
+  <div class="header-inner">
+    <!-- Royal Chain SVG Logo -->
+    <div class="logo-wrap">
+      <svg class="logo-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outer ring -->
+        <circle cx="60" cy="60" r="56" fill="none" stroke="#C9A84C" stroke-width="3"/>
+        <circle cx="60" cy="60" r="50" fill="none" stroke="#F0D080" stroke-width="1"/>
+        <!-- Chain links ring -->
+        <g stroke="#C9A84C" stroke-width="2.2" fill="none">
+          <!-- Top -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(0 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(0 60 60)"/>
+          <!-- Top-right -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(45 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(45 60 60)"/>
+          <!-- Right -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(90 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(90 60 60)"/>
+          <!-- Bottom-right -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(135 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(135 60 60)"/>
+          <!-- Bottom -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(180 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(180 60 60)"/>
+          <!-- Bottom-left -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(225 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(225 60 60)"/>
+          <!-- Left -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(270 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(270 60 60)"/>
+          <!-- Top-left -->
+          <ellipse cx="60" cy="14" rx="7" ry="4" transform="rotate(315 60 60)"/>
+          <ellipse cx="60" cy="14" rx="4" ry="7" transform="rotate(315 60 60)"/>
+        </g>
+        <!-- Crown -->
+        <g fill="#F0D080" stroke="#C9A84C" stroke-width="1">
+          <polygon points="60,34 50,50 55,48 60,55 65,48 70,50" />
+          <!-- Crown gems -->
+          <circle cx="60" cy="33" r="2.5" fill="#C9A84C"/>
+          <circle cx="50" cy="50" r="2"   fill="#AED6F1"/>
+          <circle cx="70" cy="50" r="2"   fill="#AED6F1"/>
+        </g>
+        <!-- RC Monogram -->
+        <text x="60" y="80" text-anchor="middle" font-family="Playfair Display,serif" font-size="22" font-weight="700" fill="#F0D080" letter-spacing="2">RCL</text>
+        <!-- Bottom tagline -->
+        <text x="60" y="96" text-anchor="middle" font-family="Inter,sans-serif" font-size="7" fill="#AED6F1" letter-spacing="1.5">EST. 1985</text>
+      </svg>
+    </div>
+
+    <div class="header-text">
+      <div class="company-name">Royal Chain Limited</div>
+      <div class="company-tagline">Crafting Excellence · Precision Manufacturing</div>
+      <div class="tool-name">Daily Stock Report Processor</div>
+    </div>
+
+    <div class="header-right">
+      <div class="date-badge" id="dateBadge"></div>
+    </div>
+  </div>
+</div>
+<div class="gold-rule"></div>
+
+<!-- ═══ MAIN ═══ -->
+<div class="container">
+
+  <!-- Rules Panel -->
+  <div class="rules-panel fade-up">
+    <div class="rules-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A2240" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      Processing Rules Applied Automatically
+    </div>
+    <div class="rules-grid">
+      <div class="rule-chip">
+        <div class="rule-chip-title">📋 Rule 1 — Blank WC Fill</div>
+        <div class="rule-chip-desc">
+          If <strong>Column B</strong> (WC Group) is blank → auto-fill from <span class="tag tag-auto">Party Name (Col D)</span><br>
+          If <strong>Column C</strong> (WC Name) is blank → auto-fill from <span class="tag tag-auto">Party Name (Col D)</span>
+        </div>
+      </div>
+      <div class="rule-chip">
+        <div class="rule-chip-title">🗑 Rule 2 — Remove Item Groups</div>
+        <div class="rule-chip-desc">
+          <span class="tag tag-remove">ALLOY</span>
+          <span class="tag tag-remove">Beads (gms)</span>
+          <span class="tag tag-remove">Color Stone</span>
+          <span class="tag tag-remove">CZ(gms)</span>
+          <span class="tag tag-remove">Synthetic Stone</span>
+          <span class="tag tag-remove">Pearl (gms)</span>
+          <span class="tag tag-remove">Blanks/NaN</span>
+        </div>
+      </div>
+      <div class="rule-chip">
+        <div class="rule-chip-title">⚙ Rule 3 — Other Metal Filter</div>
+        <div class="rule-chip-desc">
+          In <strong>Item Group = OTHER METAL</strong>:<br>
+          Keep only where Variant Name = <span class="tag tag-keep">OM</span><br>
+          Remove: IRON-HOLLOW, IRON-ROPE, etc.
+        </div>
+      </div>
+      <div class="rule-chip">
+        <div class="rule-chip-title">🔄 Rule 4 — No Double Entry</div>
+        <div class="rule-chip-desc">
+          Excel summary rows (<span class="tag tag-remove">Total</span> <span class="tag tag-remove">Grand Total</span> <span class="tag tag-remove">Subtotal</span>) are auto-skipped.<br>
+          Duplicate WC Group + WC Name entries are <span class="tag tag-keep">merged</span> (weights summed once).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="fade-up">
+    <div class="upload-zone" id="dropZone">
+      <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="52" height="52" rx="12" fill="#D6EAF8"/>
+        <path d="M26 14v16M19 21l7-7 7 7" stroke="#0A2240" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M14 36h24" stroke="#C9A84C" stroke-width="2.5" stroke-linecap="round"/>
+        <rect x="10" y="30" width="32" height="12" rx="3" fill="#0A2240" opacity=".08"/>
+      </svg>
+      <div class="upload-label">Drop Your Daily Stock Report Here</div>
+      <div class="upload-hint">or click to browse &nbsp;·&nbsp; Accepts .xlsx files</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+
+    <div class="file-pill" id="filePill">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27AE60" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <span class="file-pill-name" id="fileName">—</span>
+      <span class="file-pill-size" id="fileSize"></span>
+    </div>
+
+    <button class="process-btn" id="processBtn" disabled onclick="processFile()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2"/></svg>
+      Process Stock Report
+    </button>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="cards-wrap" id="cardsWrap">
+    <div class="card c-blue">
+      <span class="card-icon">📦</span>
+      <div class="card-label">Total Source Rows</div>
+      <div class="card-val" id="cTotal">—</div>
+      <div class="card-sub">After blank-fill applied</div>
+    </div>
+    <div class="card c-navy">
+      <span class="card-icon">✅</span>
+      <div class="card-label">Rows After Filtering</div>
+      <div class="card-val" id="cFiltered">—</div>
+      <div class="card-sub">Included in report</div>
+    </div>
+    <div class="card c-gold">
+      <span class="card-icon">⚖️</span>
+      <div class="card-label">Total Gross Weight</div>
+      <div class="card-val" id="cGross">—</div>
+      <div class="card-sub">grams</div>
+    </div>
+    <div class="card c-green">
+      <span class="card-icon">🔗</span>
+      <div class="card-label">WC Groups</div>
+      <div class="card-val" id="cGroups">—</div>
+      <div class="card-sub">unique groups</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-section" id="tableSection">
+    <div class="table-bar">
+      <div>
+        <div class="table-bar-title">⛓ Group-wise Stock Summary</div>
+        <div class="table-bar-sub">WC Group Name &rarr; WC Name &rarr; Gross Weight / Metal Weight</div>
+      </div>
+      <button class="dl-btn" onclick="downloadExcel()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Excel
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>WC Group Name</th>
+            <th>WC Name</th>
+            <th>Sum of Gross Weight</th>
+            <th>Sum of Metal Weight</th>
+          </tr>
+        </thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>Royal Chain Limited</strong> &nbsp;·&nbsp; Daily Stock Report Tool &nbsp;·&nbsp;
+    Filters: ALLOY, Beads, Color Stone, CZ, Synthetic Stone, Pearl removed &nbsp;·&nbsp; OTHER METAL → OM only &nbsp;·&nbsp; Double entries & Total rows auto-removed
+  </div>
+</div>
+
+<script>
+// Date badge
+const now = new Date();
+document.getElementById('dateBadge').textContent =
+  now.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+
+let fileLoaded = null;
+let processedData = null;
+
+// Items to EXCLUDE entirely (normalised to uppercase)
+const EXCLUDE_ITEMS = new Set([
+  'ALLOY','BEADS (GMS)','COLOR STONE(GMS)','CZ(GMS)',
+  'SYNTHETIC STONE (GMS)','PEARL (GMS)','PEARL'
+]);
+
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  fileLoaded = f;
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('fileSize').textContent = (f.size/1024).toFixed(1) + ' KB';
+  document.getElementById('filePill').classList.add('visible');
+  document.getElementById('processBtn').disabled = false;
+}
+
+function fmt3(n) {
+  return Number(n).toLocaleString('en-IN',{minimumFractionDigits:3,maximumFractionDigits:3});
+}
+
+function processFile() {
+  if (!fileLoaded) return;
+  const btn = document.getElementById('processBtn');
+  btn.innerHTML = '<span class="spinner"></span> &nbsp;Processing…';
+  btn.disabled = true;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:''});
+
+      // Find header row
+      let hRow = -1;
+      for (let i = 0; i < raw.length; i++) {
+        if (raw[i].some(c => String(c).trim() === 'Wcgroup Name')) { hRow = i; break; }
+      }
+      if (hRow < 0) throw new Error("Cannot find header row with 'Wcgroup Name'.");
+
+      const hdrs = raw[hRow].map(h => String(h).trim());
+      const ix = {};
+      hdrs.forEach((h,i) => ix[h] = i);
+
+      const WCG   = ix['Wcgroup Name'];
+      const WCN   = ix['Wc Name'];
+      const PARTY = ix['Party Name'];
+      const ITEM  = ix['Item Group'];
+      const GROSS = ix['Gross Weight'];
+      const METAL = ix['Metal Weight'];
+      const VNAME = ix['Variantt Name'];
+
+      if (ITEM === undefined) throw new Error("'Item Group' column not found.");
+
+      let totalRows = 0, filteredRows = 0;
+      const groupMap = {};
+
+      // Regex to detect summary/total rows from the source Excel (e.g. "BATCH Total", "Grand Total", etc.)
+      const TOTAL_ROW_RE = /\b(total|grand total|subtotal|sum)\b/i;
+
+      for (let i = hRow + 1; i < raw.length; i++) {
+        const r = raw[i];
+        // Skip section-header rows (only 1 meaningful cell)
+        const nonBlank = r.filter(c => String(c).trim() !== '').length;
+        if (nonBlank <= 1) continue;
+
+        // ── Skip Excel-generated Total / Grand-Total rows ──
+        // These appear as rows where the first few cells contain "Total" labels
+        const firstCellVal = String(r[0] || r[1] || r[2] || '').trim();
+        if (TOTAL_ROW_RE.test(firstCellVal)) continue;
+        // Also check wcgroup / wcname columns for total markers
+        const wcgRaw = String(r[WCG] || '').trim();
+        const wcnRaw = String(r[WCN] || '').trim();
+        if (TOTAL_ROW_RE.test(wcgRaw) || TOTAL_ROW_RE.test(wcnRaw)) continue;
+
+        totalRows++;
+
+        // ── Rule 1: fill blank from Party Name ──
+        const party   = String(r[PARTY] || '').trim();
+        const wcgroup = wcgRaw || party;
+        const wcname  = wcnRaw || party;
+
+        // Skip rows where both wcgroup and wcname are still blank
+        if (!wcgroup && !wcname) continue;
+
+        // ── Rule 2: exclude item groups ──
+        const itemRaw = String(r[ITEM] || '').trim();
+        const itemUp  = itemRaw.toUpperCase();
+        if (!itemRaw) continue;                          // skip blank Item Group
+        if (EXCLUDE_ITEMS.has(itemUp)) continue;
+        // also catch Pearl (gms) case-insensitive
+        if (itemRaw.toLowerCase().replace(/\s/g,'') === 'pearl(gms)') continue;
+
+        // ── Rule 3: OTHER METAL — keep only OM variant ──
+        if (itemUp === 'OTHER METAL') {
+          const vname = String(r[VNAME] || '').trim().toUpperCase();
+          if (vname !== 'OM') continue;
+        }
+
+        filteredRows++;
+        const gross = parseFloat(r[GROSS]) || 0;
+        const metal = parseFloat(r[METAL]) || 0;
+
+        // ── Deduplication: same wcgroup + wcname → merge (sum weights) ──
+        const key = wcgroup.toUpperCase() + '|||' + wcname.toUpperCase();
+        if (!groupMap[key]) groupMap[key] = {wcgroup, wcname, gross:0, metal:0};
+        groupMap[key].gross += gross;
+        groupMap[key].metal += metal;
+      }
+
+      if (filteredRows === 0) throw new Error("No rows match the filter criteria.");
+
+      // Sort by wcgroup then wcname
+      const entries = Object.values(groupMap).sort((a,b)=>{
+        if (a.wcgroup < b.wcgroup) return -1;
+        if (a.wcgroup > b.wcgroup) return 1;
+        return a.wcname < b.wcname ? -1 : 1;
+      });
+
+      const groups = {};
+      entries.forEach(e => {
+        if (!groups[e.wcgroup]) groups[e.wcgroup] = [];
+        groups[e.wcgroup].push(e);
+      });
+
+      const totalGross = entries.reduce((s,e)=>s+e.gross,0);
+      const totalMetal = entries.reduce((s,e)=>s+e.metal,0);
+      const groupCount = Object.keys(groups).length;
+
+      processedData = {groups, totalGross, totalMetal, groupCount, totalRows, filteredRows};
+      renderResult(processedData);
+
+      btn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg> Report Processed Successfully`;
+      btn.disabled = false;
+    } catch(err) {
+      alert('Error: ' + err.message);
+      btn.innerHTML = 'Process Stock Report';
+      btn.disabled = false;
+    }
+  };
+  reader.readAsArrayBuffer(fileLoaded);
+}
+
+function renderResult(d) {
+  document.getElementById('cTotal').textContent    = d.totalRows.toLocaleString();
+  document.getElementById('cFiltered').textContent = d.filteredRows.toLocaleString();
+  document.getElementById('cGross').textContent    = fmt3(d.totalGross);
+  document.getElementById('cGroups').textContent   = d.groupCount;
+  document.getElementById('cardsWrap').classList.add('visible');
+
+  const tbody = document.getElementById('reportBody');
+  tbody.innerHTML = '';
+
+  Object.entries(d.groups).forEach(([grpName, list]) => {
+    let grpGross = 0, grpMetal = 0;
+
+    list.forEach((e, i) => {
+      grpGross += e.gross;
+      grpMetal += e.metal;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i===0 ? escHtml(grpName) : ''}</td>
+        <td>${escHtml(e.wcname)}</td>
+        <td>${fmt3(e.gross)}</td>
+        <td>${fmt3(e.metal)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const tot = document.createElement('tr');
+    tot.className = 'row-total';
+    tot.innerHTML = `
+      <td>${escHtml(grpName)} Total</td><td></td>
+      <td>${fmt3(grpGross)}</td><td>${fmt3(grpMetal)}</td>
+    `;
+    tbody.appendChild(tot);
+  });
+
+  const grand = document.createElement('tr');
+  grand.className = 'row-grand';
+  grand.innerHTML = `<td>Grand Total</td><td></td><td>${fmt3(d.totalGross)}</td><td>${fmt3(d.totalMetal)}</td>`;
+  tbody.appendChild(grand);
+
+  const sumgw = document.createElement('tr');
+  sumgw.className = 'row-sumgw';
+  sumgw.innerHTML = `<td colspan="2" style="text-align:right;letter-spacing:0.08em;">TOTAL SUM OF GROSS WEIGHT</td><td>${fmt3(d.totalGross)}</td><td></td>`;
+  tbody.appendChild(sumgw);
+
+  document.getElementById('tableSection').classList.add('visible');
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function downloadExcel() {
+  if (!processedData) return;
+  const {groups, totalGross, totalMetal} = processedData;
+  const today = new Date().toISOString().slice(0,10);
+
+  const rows = [
+    ['ROYAL CHAIN LIMITED'],
+    ['Daily Stock Report — Group-wise Summary'],
+    [`Generated: ${today}  |  Filters: ALLOY, Beads, Color Stone, CZ, Synthetic Stone, Pearl removed  |  OTHER METAL → OM only`],
+    [],
+    ['Wcgroup Name','Wc Name','Sum of Gross Weight','Sum of Metal Weight']
+  ];
+
+  Object.entries(groups).forEach(([grpName, list]) => {
+    let gGross=0, gMetal=0;
+    list.forEach((e,i) => {
+      gGross += e.gross; gMetal += e.metal;
+      rows.push([
+        i===0 ? grpName : '',
+        e.wcname,
+        Math.round(e.gross*1000)/1000,
+        Math.round(e.metal*1000)/1000
+      ]);
+    });
+    rows.push([`${grpName} Total`, '', Math.round(gGross*1000)/1000, Math.round(gMetal*1000)/1000]);
+  });
+
+  rows.push(['Grand Total','', Math.round(totalGross*1000)/1000, Math.round(totalMetal*1000)/1000]);
+  rows.push(['TOTAL SUM OF GROSS WEIGHT','', Math.round(totalGross*1000)/1000,'']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:34},{wch:34},{wch:24},{wch:24}];
+
+  // Number format for weight columns
+  const rng = XLSX.utils.decode_range(ws['!ref']);
+  for (let R=5; R<=rng.e.r; R++) {
+    ['C','D'].forEach(col => {
+      const addr = col+(R+1);
+      if (ws[addr] && typeof ws[addr].v === 'number') ws[addr].z = '#,##0.000';
+    });
+  }
+
+  const wb2 = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb2, ws, 'STOCK REPORT');
+  XLSX.writeFile(wb2, `RCL_StockReport_${today}.xlsx`);
+}
+</script>
+</body>
+</html>

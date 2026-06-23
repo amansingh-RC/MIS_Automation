@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Royal Chain Limited – Scrap Report Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #F0D080;
+    --gold-pale: #EDD98A;
+    --dark-navy: #090E1A;
+    --navy: #0D1B3E;
+    --navy-mid: #1A2B5E;
+    --navy-card: #111827;
+    --navy-row: #1C2B4A;
+    --navy-alt: #152038;
+    --text-white: #F5F0E8;
+    --text-muted: #8899BB;
+    --border: rgba(201,168,76,0.25);
+    --success: #4ADE80;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark-navy);
+    color: var(--text-white);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 10% 20%, rgba(201,168,76,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 60% at 90% 80%, rgba(26,43,94,0.5) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 40px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 36px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    display: block;
+    width: 120px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    margin: 18px auto 0;
+  }
+
+  .crown-icon {
+    font-size: 28px;
+    margin-bottom: 6px;
+    display: block;
+    filter: drop-shadow(0 0 8px rgba(201,168,76,0.5));
+  }
+
+  .company-name {
+    font-family: 'Cinzel', serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    background: linear-gradient(135deg, var(--gold) 30%, var(--gold-light) 60%, var(--gold) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    margin-bottom: 4px;
+  }
+
+  .company-sub {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.35em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .tool-title {
+    font-family: 'Cinzel', serif;
+    font-size: 15px;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    margin-top: 14px;
+    text-transform: uppercase;
+  }
+
+  /* Upload zone */
+  .upload-section { margin-bottom: 32px; }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 44px 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(13,27,62,0.4);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(201,168,76,0.05), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--gold);
+    background: rgba(201,168,76,0.06);
+  }
+  .upload-zone:hover::before, .upload-zone.drag-over::before { opacity: 1; }
+
+  .upload-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+  .upload-label {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    color: var(--gold);
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .upload-hint { font-size: 13px; color: var(--text-muted); }
+  #fileInput { display: none; }
+
+  .file-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 12px 18px;
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.25);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--success);
+    display: none;
+  }
+  .file-status.visible { display: flex; }
+
+  /* Process button */
+  .process-btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--navy-mid), var(--navy));
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+    color: var(--gold);
+    font-family: 'Cinzel', serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    margin-top: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .process-btn::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(201,168,76,0.15), transparent);
+    transition: left 0.4s ease;
+  }
+  .process-btn:hover { background: rgba(201,168,76,0.12); box-shadow: 0 0 24px rgba(201,168,76,0.2); }
+  .process-btn:hover::after { left: 100%; }
+  .process-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Summary cards */
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+    display: none;
+  }
+  .summary-cards.visible { display: grid; }
+
+  .card {
+    background: var(--navy-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+  .card-label {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .card-value {
+    font-family: 'Cinzel', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--gold-light);
+  }
+  .card-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Table */
+  .table-section { display: none; }
+  .table-section.visible { display: block; }
+
+  .table-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .table-title {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    color: var(--gold);
+    letter-spacing: 0.1em;
+  }
+
+  .download-btn {
+    padding: 9px 20px;
+    background: linear-gradient(135deg, var(--gold), #A8862E);
+    border: none;
+    border-radius: 7px;
+    color: var(--dark-navy);
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    text-transform: uppercase;
+  }
+  .download-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(201,168,76,0.4); }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+
+  thead th {
+    background: var(--navy-mid);
+    color: var(--gold);
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 13px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
+
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tbody tr:nth-child(even) { background: rgba(28,43,74,0.4); }
+  tbody tr:hover { background: rgba(201,168,76,0.06); }
+
+  tbody td {
+    padding: 10px 14px;
+    color: var(--text-white);
+    font-weight: 500;
+  }
+  tbody td:nth-child(3), tbody td:nth-child(4) {
+    text-align: right;
+    font-family: 'Rajdhani', monospace;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+
+  .row-total {
+    background: rgba(42,63,111,0.8) !important;
+    font-weight: 700;
+  }
+  .row-total td { color: var(--gold) !important; font-size: 13px; }
+
+  .row-grand {
+    background: linear-gradient(90deg, rgba(201,168,76,0.18), rgba(201,168,76,0.08)) !important;
+    border-top: 1.5px solid var(--gold) !important;
+  }
+  .row-grand td {
+    color: var(--gold-light) !important;
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 12px 14px;
+  }
+
+  .row-sum-gw {
+    background: rgba(201,168,76,0.12) !important;
+    border-top: 1px solid rgba(201,168,76,0.4) !important;
+  }
+  .row-sum-gw td {
+    color: var(--gold) !important;
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 12px 14px;
+  }
+
+  .badge-scrap {
+    display: inline-block;
+    background: rgba(201,168,76,0.15);
+    border: 1px solid rgba(201,168,76,0.35);
+    color: var(--gold-light);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 40px;
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Animations */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-in { animation: fadeIn 0.4s ease forwards; }
+
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(201,168,76,0.3);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header animate-in">
+    <span class="crown-icon">♛</span>
+    <div class="company-name">Royal Chain Limited</div>
+    <div class="company-sub">Manufacturing Excellence</div>
+    <div class="tool-title">Daily Scrap Report Processor</div>
+  </div>
+
+  <div class="upload-section animate-in">
+    <div class="upload-zone" id="dropZone">
+      <span class="upload-icon">📂</span>
+      <div class="upload-label">Drop Your Daily Report Here</div>
+      <div class="upload-hint">or click to browse — accepts .xlsx files</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+    <div class="file-status" id="fileStatus">
+      <span>✓</span>
+      <span id="fileName"></span>
+    </div>
+    <button class="process-btn" id="processBtn" disabled onclick="processFile()">
+      ⚙ Process Scrap & HL-Scrap Report
+    </button>
+  </div>
+
+  <div class="summary-cards" id="summaryCards">
+    <div class="card animate-in">
+      <div class="card-label">Total Records</div>
+      <div class="card-value" id="statRecords">—</div>
+      <div class="card-sub">SCRAP + HL-SCRAP entries</div>
+    </div>
+    <div class="card animate-in">
+      <div class="card-label">Total Gross Weight</div>
+      <div class="card-value" id="statGross">—</div>
+      <div class="card-sub">grams</div>
+    </div>
+    <div class="card animate-in">
+      <div class="card-label">Total Metal Weight</div>
+      <div class="card-value" id="statMetal">—</div>
+      <div class="card-sub">grams</div>
+    </div>
+  </div>
+
+  <div class="table-section" id="tableSection">
+    <div class="table-header-bar">
+      <div class="table-title">♛ SCRAP / HL-SCRAP SUMMARY — GROUPWISE</div>
+      <button class="download-btn" onclick="downloadExcel()">
+        ⬇ Download Excel
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table id="reportTable">
+        <thead>
+          <tr>
+            <th>WC Group Name</th>
+            <th>WC Name</th>
+            <th>Sum of Gross Weight</th>
+            <th>Sum of Metal Weight</th>
+          </tr>
+        </thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    © Royal Chain Limited &nbsp;|&nbsp; Scrap Daily Report Tool &nbsp;|&nbsp; Filters: SCRAP & HL-SCRAP
+  </div>
+</div>
+
+<script>
+let processedData = null;
+let fileLoaded = null;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFile(fileInput.files[0]);
+});
+
+function loadFile(file) {
+  fileLoaded = file;
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileStatus').classList.add('visible');
+  document.getElementById('processBtn').disabled = false;
+}
+
+function fmt3(n) {
+  return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+
+function processFile() {
+  if (!fileLoaded) return;
+  const btn = document.getElementById('processBtn');
+  btn.innerHTML = '<span class="spinner"></span> Processing...';
+  btn.disabled = true;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      // Find header row containing 'Stock Status'
+      let headerRow = -1;
+      for (let i = 0; i < raw.length; i++) {
+        if (raw[i].some(c => String(c).trim() === 'Stock Status')) {
+          headerRow = i; break;
+        }
+      }
+      if (headerRow === -1) throw new Error("Header row not found. Make sure column Q contains 'Stock Status'.");
+
+      const headers = raw[headerRow].map(h => String(h).trim());
+      const colIdx = {};
+      headers.forEach((h, i) => colIdx[h] = i);
+
+      const wcgroupCol = colIdx['Wcgroup Name'];
+      const wcnameCol  = colIdx['Wc Name'];
+      const grossCol   = colIdx['Gross Weight'];
+      const metalCol   = colIdx['Metal Weight'];
+      const statusCol  = colIdx['Stock Status'];
+
+      if (statusCol === undefined) throw new Error("'Stock Status' column not found.");
+
+      // Filter rows
+      const rows = [];
+      for (let i = headerRow + 1; i < raw.length; i++) {
+        const r = raw[i];
+        const status = String(r[statusCol] || '').trim().toUpperCase();
+        if (status === 'SCRAP' || status === 'HL-SCRAP') {
+          rows.push({
+            wcgroup: String(r[wcgroupCol] || '').trim(),
+            wcname:  String(r[wcnameCol]  || '').trim(),
+            gross:   parseFloat(r[grossCol])  || 0,
+            metal:   parseFloat(r[metalCol])  || 0,
+          });
+        }
+      }
+
+      if (rows.length === 0) throw new Error("No SCRAP or HL-SCRAP rows found in this file.");
+
+      // Group by wcgroup + wcname
+      const groupMap = {};
+      rows.forEach(r => {
+        const key = r.wcgroup + '|||' + r.wcname;
+        if (!groupMap[key]) groupMap[key] = { wcgroup: r.wcgroup, wcname: r.wcname, gross: 0, metal: 0 };
+        groupMap[key].gross += r.gross;
+        groupMap[key].metal += r.metal;
+      });
+
+      // Sort by wcgroup, wcname
+      const entries = Object.values(groupMap).sort((a,b) => {
+        if (a.wcgroup < b.wcgroup) return -1;
+        if (a.wcgroup > b.wcgroup) return 1;
+        if (a.wcname  < b.wcname)  return -1;
+        if (a.wcname  > b.wcname)  return 1;
+        return 0;
+      });
+
+      // Build groups
+      const groups = {};
+      entries.forEach(e => {
+        if (!groups[e.wcgroup]) groups[e.wcgroup] = [];
+        groups[e.wcgroup].push(e);
+      });
+
+      const totalGross = rows.reduce((s, r) => s + r.gross, 0);
+      const totalMetal = rows.reduce((s, r) => s + r.metal, 0);
+
+      processedData = { groups, totalGross, totalMetal, rowCount: rows.length };
+      renderResults(processedData);
+
+      btn.innerHTML = '✓ Report Processed';
+      btn.disabled = false;
+    } catch(err) {
+      alert('Error: ' + err.message);
+      btn.innerHTML = '⚙ Process Scrap & HL-Scrap Report';
+      btn.disabled = false;
+    }
+  };
+  reader.readAsArrayBuffer(fileLoaded);
+}
+
+function renderResults(data) {
+  // Summary cards
+  document.getElementById('statRecords').textContent = data.rowCount.toLocaleString();
+  document.getElementById('statGross').textContent = fmt3(data.totalGross);
+  document.getElementById('statMetal').textContent = fmt3(data.totalMetal);
+  document.getElementById('summaryCards').classList.add('visible');
+
+  // Table
+  const tbody = document.getElementById('reportBody');
+  tbody.innerHTML = '';
+
+  Object.entries(data.groups).forEach(([grpName, entries]) => {
+    let grpGross = 0, grpMetal = 0;
+    entries.forEach((e, i) => {
+      grpGross += e.gross;
+      grpMetal += e.metal;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i === 0 ? grpName : ''}</td>
+        <td>${e.wcname}</td>
+        <td>${fmt3(e.gross)}</td>
+        <td>${fmt3(e.metal)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    // Group total row
+    const trTotal = document.createElement('tr');
+    trTotal.className = 'row-total';
+    trTotal.innerHTML = `
+      <td>${grpName} Total</td>
+      <td></td>
+      <td>${fmt3(grpGross)}</td>
+      <td>${fmt3(grpMetal)}</td>
+    `;
+    tbody.appendChild(trTotal);
+  });
+
+  // Grand total
+  const trGrand = document.createElement('tr');
+  trGrand.className = 'row-grand';
+  trGrand.innerHTML = `
+    <td>Grand Total</td>
+    <td></td>
+    <td>${fmt3(data.totalGross)}</td>
+    <td>${fmt3(data.totalMetal)}</td>
+  `;
+  tbody.appendChild(trGrand);
+
+  // Total Sum of Gross Weight row
+  const trSum = document.createElement('tr');
+  trSum.className = 'row-sum-gw';
+  trSum.innerHTML = `
+    <td colspan="2" style="text-align:right; letter-spacing:0.1em;">TOTAL SUM OF GROSS WEIGHT</td>
+    <td>${fmt3(data.totalGross)}</td>
+    <td></td>
+  `;
+  tbody.appendChild(trSum);
+
+  document.getElementById('tableSection').classList.add('visible');
+}
+
+function downloadExcel() {
+  if (!processedData) return;
+  const { groups, totalGross, totalMetal } = processedData;
+
+  const wb = XLSX.utils.book_new();
+  const wsData = [];
+
+  // Headers
+  wsData.push(['ROYAL CHAIN LIMITED']);
+  wsData.push(['SCRAP & HL-SCRAP REPORT']);
+  wsData.push([]);
+  wsData.push(['Wcgroup Name', 'Wc Name', 'Sum of Gross Weight', 'Sum of Metal Weight']);
+
+  Object.entries(groups).forEach(([grpName, entries]) => {
+    let grpGross = 0, grpMetal = 0;
+    entries.forEach((e, i) => {
+      grpGross += e.gross;
+      grpMetal += e.metal;
+      wsData.push([i === 0 ? grpName : '', e.wcname,
+        Math.round(e.gross * 1000) / 1000,
+        Math.round(e.metal * 1000) / 1000]);
+    });
+    wsData.push([`${grpName} Total`, '',
+      Math.round(grpGross * 1000) / 1000,
+      Math.round(grpMetal * 1000) / 1000]);
+  });
+
+  wsData.push(['Grand Total', '',
+    Math.round(totalGross * 1000) / 1000,
+    Math.round(totalMetal * 1000) / 1000]);
+  wsData.push(['TOTAL SUM OF GROSS WEIGHT', '',
+    Math.round(totalGross * 1000) / 1000, '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 22 }, { wch: 22 }];
+
+  // Number format for weight columns
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = 4; R <= range.e.r; R++) {
+    ['C','D'].forEach(col => {
+      const addr = col + (R + 1);
+      if (ws[addr] && typeof ws[addr].v === 'number') {
+        ws[addr].z = '#,##0.000';
+      }
+    });
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'SCRAP REPORT');
+
+  const today = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `RCL_Scrap_Report_${today}.xlsx`);
+}
+</script>
+</body>
+</html>

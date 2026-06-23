@@ -1,10 +1,20 @@
-# Loss Report Automation
+# RCL MIS Report Automation
 
-A web app that takes the raw **Monthly Loss Report Summary** export
-(`.xls` or `.xlsx`) and returns the clean **Loss Report Summary** sheet — the
-formatted single sheet you build by hand every day.
+A web app with two tools (tabs):
 
-## What it produces
+1. **Loss Report** — raw export → formatted **Loss Report Summary** sheet.
+2. **Scrap + Stock Report** — one daily export → one workbook with **two
+   sheets** (`SCRAP REPORT` and `STOCK REPORT`).
+
+---
+
+## Tool 1 — Loss Report
+
+Takes the raw **Monthly Loss Report Summary** export (`.xls` or `.xlsx`) and
+returns the clean **Loss Report Summary** sheet — the formatted single sheet
+you build by hand every day.
+
+### What it produces
 
 A new `.xlsx` with one sheet (`Loss Report Summary`) that matches your target:
 
@@ -21,6 +31,30 @@ A new `.xlsx` with one sheet (`Loss Report Summary`) that matches your target:
 
 Columns are detected **by header name**, so it tolerates minor naming/order
 changes. Gains stored as `(4.89)` or as negative numbers are handled correctly.
+
+---
+
+## Tool 2 — Scrap + Stock Report
+
+Upload **one** daily export; both reports run and you download **one workbook
+with two sheets**.
+
+**SCRAP REPORT** (sheet 1): finds the header row with `Stock Status`, keeps
+rows where status is `SCRAP` or `HL-SCRAP`, groups by *WC Group + WC Name*, and
+sums Gross / Metal weight (group totals + grand total).
+
+**STOCK REPORT** (sheet 2): finds the header row with `Wcgroup Name`, then:
+- fills blank *WC Group* / *WC Name* from *Party Name*;
+- removes Item Groups: ALLOY, Beads (gms), Color Stone, CZ, Synthetic Stone,
+  Pearl;
+- under *OTHER METAL* keeps only the `OM` variant;
+- skips Total / Grand Total / Subtotal rows;
+- merges duplicate *WC Group + WC Name* (weights summed once).
+
+These are faithful Python ports of `RCL_SCRAP_REPORT_TOOL.html` and
+`RCL_STOCK_REPORT_DAILY_TOOL.html`.
+
+---
 
 ## Setup (one time)
 
@@ -45,9 +79,11 @@ The browser opens automatically. Then:
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Streamlit web interface (upload / preview / download) |
-| `loss_report.py` | Core logic: read, detect columns, build the formatted output |
-| `test_loss_report.py` | Self-test of the formulas + template (`python test_loss_report.py`) |
+| `app.py` | Streamlit web interface (two tabs) |
+| `loss_report.py` | Loss Report logic: read, detect columns, build formatted output |
+| `rcl_reports.py` | Scrap + Stock logic and combined 2-sheet workbook |
+| `test_loss_report.py` | Self-test of the Loss Report (`python test_loss_report.py`) |
+| `test_rcl_reports.py` | Self-test of Scrap + Stock (`python test_rcl_reports.py`) |
 | `requirements.txt` | Python dependencies |
 
 ## Notes
