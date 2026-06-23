@@ -23,8 +23,10 @@ import ui
 from loss_report import LossReportError, process
 from rcl_reports import process_scrap_and_stock
 
-st.set_page_config(page_title="RCL MIS Automation", page_icon="♛",
-                   layout="wide")
+st.set_page_config(
+    page_title="RCL MIS Automation",
+    page_icon="https://royalchaingroup.com/wp-content/uploads/2025/09/favicon.png",
+    layout="wide")
 ui.inject_css()
 ui.render_header()
 

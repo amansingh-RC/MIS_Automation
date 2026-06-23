@@ -7,7 +7,13 @@ new tab is a few lines. Royal Chain palette: deep navy + gold.
 
 from __future__ import annotations
 
+import base64
+from functools import lru_cache
+from pathlib import Path
+
 import streamlit as st
+
+_LOGO_PATH = Path(__file__).parent / "assets" / "royal_chain_logo.png"
 
 GOLD = "#C9A84C"
 GOLD_LIGHT = "#F0D080"
@@ -50,16 +56,17 @@ _CSS = """
   padding: 26px 0 18px;
   margin-bottom: 8px;
 }
-.rcl-crown { font-size: 30px; filter: drop-shadow(0 0 10px rgba(201,168,76,0.5)); }
-.rcl-name {
-  font-family: 'Cinzel', serif;
-  font-size: 30px; font-weight: 700; letter-spacing: 0.12em;
-  background: linear-gradient(135deg, #C9A84C 25%, #F0D080 55%, #C9A84C 100%);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin: 2px 0;
+.rcl-logo-card {
+  display: inline-block;
+  background: #FFFFFF;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 26px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35), 0 0 22px rgba(201,168,76,0.18);
 }
+.rcl-logo-card img { height: 84px; width: auto; display: block; }
 .rcl-sub {
+  margin-top: 14px;
   font-size: 12px; letter-spacing: 0.35em; color: var(--text-muted);
   text-transform: uppercase; font-weight: 600;
 }
@@ -164,12 +171,25 @@ def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+@lru_cache(maxsize=1)
+def _logo_data_uri() -> str:
+    """Base64 data URI of the local logo (embedded so it works offline)."""
+    try:
+        data = _LOGO_PATH.read_bytes()
+    except OSError:
+        return ""
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+
 def render_header() -> None:
+    uri = _logo_data_uri()
+    logo = (f'<div class="rcl-logo-card"><img src="{uri}" alt="Royal Chain '
+            f'Limited"></div>' if uri else
+            '<div class="rcl-name">Royal Chain Limited</div>')
     st.markdown(
-        """
+        f"""
         <div class="rcl-header">
-          <div class="rcl-crown">♛</div>
-          <div class="rcl-name">Royal Chain Limited</div>
+          {logo}
           <div class="rcl-sub">MIS Report Automation</div>
           <div class="rcl-rule"></div>
         </div>
