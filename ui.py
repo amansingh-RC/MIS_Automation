@@ -203,6 +203,7 @@ def section_title(title: str, subtitle: str = "") -> None:
 def render_footer() -> None:
     st.markdown(
         '<div class="rcl-footer">© Royal Chain Limited &nbsp;·&nbsp; '
-        'MIS Report Automation &nbsp;·&nbsp; Internal Tool</div>',
+        'MIS Report Automation &nbsp;·&nbsp; Internal Tool <br>'
+        'Developed By Aman Singh</div>',
         unsafe_allow_html=True,
     )
