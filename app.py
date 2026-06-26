@@ -20,6 +20,9 @@ import pandas as pd
 import streamlit as st
 
 import ui
+from factory_inward import (add_factory_inward_sheet, default_positions,
+                            load_positions)
+from groupsales import add_groupsales_sheet
 from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
 from rcl_reports import add_scrap_stock_sheets
@@ -35,6 +38,7 @@ ui.render_header()
 XLSX_MIME = ("application/vnd.openxmlformats-officedocument"
              ".spreadsheetml.sheet")
 TODAY = date.today().isoformat()
+TODAY_DMY = date.today().strftime("%d-%m-%Y")
 
 
 # ===========================================================================
@@ -42,6 +46,15 @@ TODAY = date.today().isoformat()
 # ===========================================================================
 def _add_scrap_stock(wb, file_bytes):
     return add_scrap_stock_sheets(wb, file_bytes, TODAY)
+
+
+def _get_positions():
+    """Session override position table, else the bundled default."""
+    return st.session_state.get("fi_positions") or default_positions()
+
+
+def _add_factory_inward(wb, file_bytes):
+    return add_factory_inward_sheet(wb, file_bytes, _get_positions(), TODAY_DMY)
 
 
 # ===========================================================================
@@ -81,6 +94,52 @@ def _preview_lot(result):
                  hide_index=True)
 
 
+def _preview_factory(result):
+    note = (f"  ·  {result.date_from} → {result.date_to}"
+            if (result.date_from or result.date_to) else "")
+    msg = (f"Grand Total — Net Wt: {result.grand_net:,.3f}  ·  "
+           f"Pg Wt: {result.grand_pg:,.3f}{note}")
+    if result.unlisted:
+        msg += (f"  ·  {len(result.unlisted)} party(ies) not in position "
+                "table (placed at end)")
+    if result.skipped:
+        msg += f"  ·  {result.skipped} row(s) skipped (variant matched no karat)"
+    st.success(msg)
+    st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
+                 hide_index=True)
+
+
+def _factory_extra():
+    """Optional position-table override for the Factory Inward tab."""
+    with st.expander("Party position table (optional override)"):
+        st.caption("By default the bundled position table is used. Upload a "
+                   "new one (columns: Name, Position) to override it.")
+        pf = st.file_uploader("Position table (.xlsx / .xls)",
+                              type=["xlsx", "xlsm", "xls"], key="fi_pos_upl")
+        if pf is not None:
+            try:
+                st.session_state["fi_positions"] = load_positions(pf.getvalue())
+                st.success(f"Loaded {len(st.session_state['fi_positions'])} "
+                           "party positions from the uploaded table.")
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Position table error: {exc}")
+        else:
+            st.session_state.pop("fi_positions", None)
+            st.caption(f"Using bundled table "
+                       f"({len(default_positions())} parties).")
+
+
+def _preview_groupsales(result):
+    note = f"  ·  Date: {result.date}" if result.date else ""
+    msg = (f"Grand Total — Net Wt: {result.grand_net:,.3f}  ·  "
+           f"Pg Wt: {result.grand_pg:,.3f}{note}")
+    if result.skipped:
+        msg += f"  ·  {result.skipped} row(s) skipped (melting matched no karat)"
+    st.success(msg)
+    st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
+                 hide_index=True)
+
+
 # ===========================================================================
 # Tool registry — add a dict here to add a new tab.
 # ===========================================================================
@@ -113,6 +172,28 @@ TOOLS = [
                 "Operation / Wc / User columns, and a recomputed Wt total.",
         "add": add_lot_rejection_sheet, "preview": _preview_lot,
     },
+    {
+        "key": "groupsales", "label": "💍  Groupsales",
+        "title": "Groupsales Reports",
+        "subtitle": "Raw export → pivot of Groupsales → Karat → Net Wt / Pg Wt "
+                    "with per-group and grand totals.",
+        "help": "Karat is derived from melting % (Metal Fineness × 100): "
+                "24KT 99–100, 22KT 91–92.5, 18KT 74.5–76, 14KT 57.5–59.8. "
+                "Groups are listed alphabetically.",
+        "add": add_groupsales_sheet, "preview": _preview_groupsales,
+    },
+    {
+        "key": "factory_inward", "label": "🏭  Factory Inward",
+        "title": "Factory Inward (GRN)",
+        "subtitle": "Raw GRN export → pivot of Sr. No. / Party Name / Karat / "
+                    "Net Wt / Pg Wt, ordered by the party position table.",
+        "help": "Karat comes from the Variant Name (decimal melting %, else a "
+                "literal NNKT). Parties are ordered by the position table; "
+                "Sr. No. = position value, and parties not in the table go to "
+                "the end. Includes a karat-only summary block.",
+        "add": _add_factory_inward, "preview": _preview_factory,
+        "extra": _factory_extra,
+    },
 ]
 
 # Bytes of every successfully-readable upload, keyed by tool — drives the
@@ -124,6 +205,8 @@ def render_tool_tab(spec: dict) -> None:
     ui.section_title(spec["title"], spec["subtitle"])
     with st.expander("How it works"):
         st.markdown(spec["help"])
+    if spec.get("extra"):
+        spec["extra"]()
 
     file = st.file_uploader(
         "Drop the report here  ·  .xls / .xlsx",
