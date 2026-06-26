@@ -265,11 +265,14 @@ def _write_data_rows(ws, groups, total_gross, total_metal, first_data_row):
                 cell.alignment = _RIGHT
 
 
-def build_combined_workbook(scrap: dict, stock: dict, today: str) -> bytes:
-    wb = openpyxl.Workbook()
+def add_scrap_stock_sheets(wb: openpyxl.Workbook, file_bytes: bytes,
+                           today: str) -> dict:
+    """Append both SCRAP REPORT and STOCK REPORT sheets to ``wb``; return summary."""
+    grid = _grid_first_sheet(file_bytes)
+    scrap = process_scrap(grid)
+    stock = process_stock(grid)
 
-    ws = wb.active
-    ws.title = "SCRAP REPORT"
+    ws = wb.create_sheet("SCRAP REPORT")
     ws.append(["ROYAL CHAIN LIMITED"])
     ws.append(["SCRAP & HL-SCRAP REPORT"])
     ws.append([])
@@ -305,18 +308,7 @@ def build_combined_workbook(scrap: dict, stock: dict, today: str) -> bytes:
     for col, w in zip("ABCD", (34, 34, 24, 24)):
         ws2.column_dimensions[col].width = w
 
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    return buffer.getvalue()
-
-
-def process_scrap_and_stock(file_bytes: bytes, today: str) -> tuple[bytes, dict]:
-    """Run both reports on one input; return (xlsx_bytes, summary)."""
-    grid = _grid_first_sheet(file_bytes)
-    scrap = process_scrap(grid)
-    stock = process_stock(grid)
-    out = build_combined_workbook(scrap, stock, today)
-    summary = {
+    return {
         "scrap_rows": scrap["row_count"],
         "scrap_gross": scrap["total_gross"],
         "scrap_metal": scrap["total_metal"],
@@ -325,4 +317,11 @@ def process_scrap_and_stock(file_bytes: bytes, today: str) -> tuple[bytes, dict]
         "stock_gross": stock["total_gross"],
         "stock_metal": stock["total_metal"],
     }
-    return out, summary
+
+
+def process_scrap_and_stock(file_bytes: bytes, today: str) -> tuple[bytes, dict]:
+    """Run both reports on one input; return (xlsx_bytes, summary)."""
+    from report_common import new_workbook, workbook_bytes
+    wb = new_workbook()
+    summary = add_scrap_stock_sheets(wb, file_bytes, today)
+    return workbook_bytes(wb), summary

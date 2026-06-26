@@ -1,3 +1,17 @@
+"""
+Streamlit web app for Royal Chain MIS report automation.
+
+Run with:
+    streamlit run app.py
+
+Each tab is one report tool: upload its file, preview, download just that
+report. The sidebar offers a single "Combined Workbook" download that merges
+every uploaded tab's output sheets into one .xlsx.
+
+Adding a new tool later: write an `add_<name>_sheet(wb, file_bytes)` function in
+its own module, then add one entry to the TOOLS list below.
+"""
+
 from __future__ import annotations
 
 from datetime import date
@@ -6,8 +20,10 @@ import pandas as pd
 import streamlit as st
 
 import ui
-from loss_report import LossReportError, process
-from rcl_reports import process_scrap_and_stock
+from loss_report import LossReportError, add_loss_sheet
+from lot_rejection import add_lot_rejection_sheet
+from rcl_reports import add_scrap_stock_sheets
+from report_common import new_workbook, workbook_bytes
 
 st.set_page_config(
     page_title="RCL MIS Automation",
@@ -18,84 +34,112 @@ ui.render_header()
 
 XLSX_MIME = ("application/vnd.openxmlformats-officedocument"
              ".spreadsheetml.sheet")
+TODAY = date.today().isoformat()
 
-def render_loss_tab() -> None:
-    ui.section_title(
-        "Loss Report",
-        "Upload the raw export → get the formatted Loss Report Summary sheet "
-        "with Final Loss and Loss %.")
 
-    with st.expander("How the new columns are calculated"):
-        st.markdown(
-            "- **Final Loss** = Loss Quantity Pg + Gain Pg\n"
-            "- **Loss %** = Final Loss ÷ (Process + Unutilized + "
-            "Unutilized Scrap + Unutilized Sample)")
+# ===========================================================================
+# Per-tool sheet adders (signature: (workbook, file_bytes) -> result)
+# ===========================================================================
+def _add_scrap_stock(wb, file_bytes):
+    return add_scrap_stock_sheets(wb, file_bytes, TODAY)
 
-    files = st.file_uploader(
-        "Drop the Loss Report here  ·  .xls / .xlsx",
-        type=["xlsx", "xlsm", "xls"], accept_multiple_files=True,
-        key="loss_upl")
 
-    if not files:
-        st.info("Upload one or more files to begin.")
-        return
+# ===========================================================================
+# Per-tool preview renderers (result -> Streamlit output)
+# ===========================================================================
+def _preview_loss(result):
+    note = (f"  ·  Dates: {result.date_from} → {result.date_to}"
+            if (result.date_from or result.date_to) else "")
+    st.success(f"Processed {len(result.rows)} work-center rows.{note}")
+    df = pd.DataFrame(result.rows)
+    if "Loss %" in df:
+        df["Loss %"] = df["Loss %"].apply(
+            lambda v: f"{v:.3%}" if v is not None else "")
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
-    for file in files:
-        st.divider()
-        st.subheader(f"📄 {file.name}")
-        try:
-            out_bytes, report = process(file.getvalue())
-        except LossReportError as exc:
-            st.error(f"Could not process this file: {exc}")
-            continue
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Unexpected error reading the file: {exc}")
-            continue
 
-        note = ""
-        if report.date_from or report.date_to:
-            note = f"  ·  Dates: {report.date_from} → {report.date_to}"
-        st.success(f"Processed {len(report.rows)} work-center rows.{note}")
+def _preview_scrap_stock(result):
+    st.success("Both reports generated (2 sheets).")
+    st.markdown("##### ♻️ Scrap Report")
+    a, b, c = st.columns(3)
+    a.metric("Scrap rows", f"{result['scrap_rows']:,}")
+    b.metric("Gross Weight", f"{result['scrap_gross']:,.3f}")
+    c.metric("Metal Weight", f"{result['scrap_metal']:,.3f}")
+    st.markdown("##### 📦 Stock Report")
+    d, e, f = st.columns(3)
+    d.metric("Rows after filtering", f"{result['stock_filtered']:,}")
+    e.metric("WC Groups", f"{result['stock_groups']:,}")
+    f.metric("Gross Weight", f"{result['stock_gross']:,.3f}")
 
-        preview = pd.DataFrame(report.rows)
-        if "Loss %" in preview:
-            preview["Loss %"] = preview["Loss %"].apply(
-                lambda v: f"{v:.3%}" if v is not None else "")
-        st.dataframe(preview, use_container_width=True, hide_index=True)
 
-        out_name = file.name.rsplit(".", 1)[0] + "_processed.xlsx"
-        st.download_button(
-            f"⬇  Download {out_name}", data=out_bytes, file_name=out_name,
-            mime=XLSX_MIME, key="loss_dl_" + file.name)
+def _preview_lot(result):
+    note = (f"  ·  {result.date_from} → {result.date_to}"
+            if (result.date_from or result.date_to) else "")
+    st.success(f"Processed {len(result.rows)} rejection rows.  "
+               f"Total Wt: {result.total_wt:,.2f}{note}")
+    st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
+                 hide_index=True)
 
-def render_scrap_stock_tab() -> None:
-    ui.section_title(
-        "Scrap + Stock Report",
-        "Upload one daily export → both reports run → one workbook with two "
-        "sheets (SCRAP REPORT and STOCK REPORT).")
 
-    with st.expander("What each report does"):
-        st.markdown(
-            "**SCRAP REPORT** — keeps rows where *Stock Status* is `SCRAP` or "
-            "`HL-SCRAP`, grouped by WC Group + WC Name (Gross / Metal summed)."
-            "\n\n**STOCK REPORT** — fills blank WC from Party Name; removes "
-            "ALLOY, Beads, Color Stone, CZ, Synthetic Stone, Pearl; keeps only "
-            "`OM` under OTHER METAL; skips Total rows; merges duplicates.")
+# ===========================================================================
+# Tool registry — add a dict here to add a new tab.
+# ===========================================================================
+TOOLS = [
+    {
+        "key": "loss", "label": "📉  Loss Report", "title": "Loss Report",
+        "subtitle": "Raw export → formatted Loss Report Summary with "
+                    "Final Loss and Loss %.",
+        "help": "**Final Loss** = Loss Quantity + Gain Pg.  \n"
+                "**Loss %** = Final Loss ÷ (Process + Unutilized + Scrap + "
+                "Sample).",
+        "add": add_loss_sheet, "preview": _preview_loss,
+    },
+    {
+        "key": "scrap_stock", "label": "♻️  Scrap + Stock",
+        "title": "Scrap + Stock Report",
+        "subtitle": "One daily export → one workbook with SCRAP REPORT and "
+                    "STOCK REPORT sheets.",
+        "help": "**Scrap**: keeps SCRAP / HL-SCRAP rows grouped by WC.  \n"
+                "**Stock**: removes ALLOY/Beads/stones/Pearl, keeps OM under "
+                "OTHER METAL, merges duplicates.",
+        "add": _add_scrap_stock, "preview": _preview_scrap_stock,
+    },
+    {
+        "key": "lot", "label": "🧾  Lot Rejection",
+        "title": "Lot Rejection Report",
+        "subtitle": "Raw export → clean Lot Rejection Report in the standard "
+                    "layout with a Grand Total of Wt.",
+        "help": "Rebuilds the report with the title, date band, merged "
+                "Operation / Wc / User columns, and a recomputed Wt total.",
+        "add": add_lot_rejection_sheet, "preview": _preview_lot,
+    },
+]
+
+# Bytes of every successfully-readable upload, keyed by tool — drives the
+# combined workbook in the sidebar.
+uploaded_bytes: dict[str, bytes] = {}
+
+
+def render_tool_tab(spec: dict) -> None:
+    ui.section_title(spec["title"], spec["subtitle"])
+    with st.expander("How it works"):
+        st.markdown(spec["help"])
 
     file = st.file_uploader(
-        "Drop the daily report here  ·  .xls / .xlsx",
+        "Drop the report here  ·  .xls / .xlsx",
         type=["xlsx", "xlsm", "xls"], accept_multiple_files=False,
-        key="ss_upl")
-
+        key=spec["key"] + "_upl")
     if file is None:
-        st.info("Upload one file to run both reports.")
+        st.info("Upload a file to process this report.")
         return
 
+    data = file.getvalue()
     st.divider()
     st.subheader(f"📄 {file.name}")
     try:
-        out_bytes, summary = process_scrap_and_stock(
-            file.getvalue(), date.today().isoformat())
+        wb = new_workbook()
+        result = spec["add"](wb, data)
+        out_bytes = workbook_bytes(wb)
     except LossReportError as exc:
         st.error(f"Could not process this file: {exc}")
         return
@@ -103,32 +147,53 @@ def render_scrap_stock_tab() -> None:
         st.error(f"Unexpected error reading the file: {exc}")
         return
 
-    st.markdown("##### ♻️ Scrap Report")
-    a, b, c = st.columns(3)
-    a.metric("Scrap rows", f"{summary['scrap_rows']:,}")
-    b.metric("Gross Weight", f"{summary['scrap_gross']:,.3f}")
-    c.metric("Metal Weight", f"{summary['scrap_metal']:,.3f}")
+    uploaded_bytes[spec["key"]] = data          # include in combined workbook
+    spec["preview"](result)
 
-    st.markdown("##### 📦 Stock Report")
-    d, e, f = st.columns(3)
-    d.metric("Rows after filtering", f"{summary['stock_filtered']:,}")
-    e.metric("WC Groups", f"{summary['stock_groups']:,}")
-    f.metric("Gross Weight", f"{summary['stock_gross']:,.3f}")
-
-    st.divider()
-    out_name = "RCL_Scrap_Stock_" + date.today().isoformat() + ".xlsx"
+    out_name = f"{spec['title'].replace(' ', '_')}_{TODAY}.xlsx"
     st.download_button(
-        f"⬇  Download {out_name}  (2 sheets)", data=out_bytes,
-        file_name=out_name, mime=XLSX_MIME, key="ss_dl")
+        f"⬇  Download {spec['title']}", data=out_bytes, file_name=out_name,
+        mime=XLSX_MIME, key=spec["key"] + "_dl")
 
 
-TABS = [
-    ("📉  Loss Report", render_loss_tab),
-    ("♻️  Scrap + Stock", render_scrap_stock_tab),
-]
-
-for tab, (_label, render_fn) in zip(st.tabs([t[0] for t in TABS]), TABS):
+for tab, spec in zip(st.tabs([t["label"] for t in TOOLS]), TOOLS):
     with tab:
-        render_fn()
+        render_tool_tab(spec)
 
+
+# ===========================================================================
+# Sidebar — universal combined workbook (all uploaded tabs as sub-sheets)
+# ===========================================================================
+def render_combined_sidebar() -> None:
+    with st.sidebar:
+        st.markdown("### 📚 Combined Workbook")
+        st.caption("One file with every uploaded tab's output as sub-sheets.")
+
+        if not uploaded_bytes:
+            st.info("Upload a file in any tab to enable this.")
+            return
+
+        wb = new_workbook()
+        included, errors = [], []
+        for spec in TOOLS:
+            if spec["key"] not in uploaded_bytes:
+                continue
+            try:
+                spec["add"](wb, uploaded_bytes[spec["key"]])
+                included.append(spec["title"])
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{spec['title']}: {exc}")
+
+        if included:
+            st.success("Included: " + ", ".join(included))
+            st.download_button(
+                "⬇  Download Combined Workbook",
+                data=workbook_bytes(wb),
+                file_name=f"RCL_MIS_Combined_{TODAY}.xlsx",
+                mime=XLSX_MIME, key="combined_dl")
+        for msg in errors:
+            st.warning(msg)
+
+
+render_combined_sidebar()
 ui.render_footer()

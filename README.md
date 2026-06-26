@@ -1,10 +1,20 @@
 # RCL MIS Report Automation
 
-A web app with two tools (tabs):
+A web app with one tab per report tool:
 
 1. **Loss Report** — raw export → formatted **Loss Report Summary** sheet.
 2. **Scrap + Stock Report** — one daily export → one workbook with **two
    sheets** (`SCRAP REPORT` and `STOCK REPORT`).
+3. **Lot Rejection Report** — raw export → clean **Lot Rejection Report** in the
+   standard layout (title, date band, merged Operation / Wc / User columns,
+   recomputed Grand Total of Wt).
+
+**Combined Workbook (sidebar):** upload a file in any number of tabs, then use
+the sidebar **Download Combined Workbook** button to get a single `.xlsx` that
+contains every uploaded tab's output sheets together.
+
+To add a new tool later: write an `add_<name>_sheet(wb, file_bytes)` function in
+its own module and add one entry to the `TOOLS` list in `app.py`.
 
 ---
 
@@ -79,11 +89,13 @@ The browser opens automatically. Then:
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Streamlit web interface (two tabs) |
-| `loss_report.py` | Loss Report logic: read, detect columns, build formatted output |
-| `rcl_reports.py` | Scrap + Stock logic and combined 2-sheet workbook |
-| `test_loss_report.py` | Self-test of the Loss Report (`python test_loss_report.py`) |
-| `test_rcl_reports.py` | Self-test of Scrap + Stock (`python test_rcl_reports.py`) |
+| `app.py` | Streamlit web interface (tab registry + combined-workbook sidebar) |
+| `report_common.py` | Workbook lifecycle helpers + date formatting |
+| `loss_report.py` | Loss Report logic and `add_loss_sheet` |
+| `rcl_reports.py` | Scrap + Stock logic and `add_scrap_stock_sheets` |
+| `lot_rejection.py` | Lot Rejection logic and `add_lot_rejection_sheet` |
+| `ui.py` | Branding / theme / CSS |
+| `test_loss_report.py` / `test_rcl_reports.py` / `test_lot_rejection.py` | Self-tests |
 | `requirements.txt` | Python dependencies |
 
 ## Notes

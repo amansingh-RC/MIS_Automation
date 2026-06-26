@@ -166,8 +166,8 @@ def _center(wrap=True):
     return Alignment(horizontal="center", vertical="center", wrap_text=wrap)
 
 
-def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
-    """Build the formatted Loss Report. Returns (xlsx_bytes, ParsedReport)."""
+def add_loss_sheet(wb: openpyxl.Workbook, file_bytes: bytes) -> ParsedReport:
+    """Append the formatted 'Loss Report Summary' sheet to ``wb``."""
     grid = _grid_from_bytes(file_bytes)
     header_row, col_map = _find_header(grid)
     if header_row is None:
@@ -186,9 +186,7 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
 
     date_from, date_to = _extract_dates(grid)
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Loss Report Summary"
+    ws = wb.create_sheet("Loss Report Summary")
     last_letter = get_column_letter(_LAST_COL)
 
     ws.merge_cells(f"A1:{last_letter}1")
@@ -302,7 +300,12 @@ def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
     ws.row_dimensions[hr].height = 36
     ws.freeze_panes = ws.cell(row=hr + 1, column=1)
 
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    return buffer.getvalue(), ParsedReport(rows=preview, date_from=date_from,
-                                           date_to=date_to)
+    return ParsedReport(rows=preview, date_from=date_from, date_to=date_to)
+
+
+def process(file_bytes: bytes) -> tuple[bytes, ParsedReport]:
+    """Build a single-sheet Loss Report workbook. Returns (xlsx_bytes, report)."""
+    from report_common import new_workbook, workbook_bytes
+    wb = new_workbook()
+    report = add_loss_sheet(wb, file_bytes)
+    return workbook_bytes(wb), report
