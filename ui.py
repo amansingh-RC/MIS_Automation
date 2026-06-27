@@ -70,9 +70,17 @@ _CSS = """
 }
 .rcl-section-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 14px; }
 
-/* ---- Tabs ---- */
+/* ---- Tabs (single scrollable row) ---- */
 [data-testid="stTabs"] [role="tablist"] {
-  gap: 6px; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  gap: 6px; border-bottom: 1px solid var(--border);
+  flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+}
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar { height: 7px; }
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-track {
+  background: rgba(13,27,62,0.4);
+}
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-thumb {
+  background: var(--gold); border-radius: 4px;
 }
 [data-testid="stTabs"] [role="tab"] {
   background: rgba(13,27,62,0.45);
@@ -80,6 +88,7 @@ _CSS = """
   border-radius: 10px 10px 0 0;
   padding: 9px 20px; color: var(--text-muted);
   font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.06em;
+  flex: 0 0 auto; white-space: nowrap;
 }
 [data-testid="stTabs"] [role="tab"]:hover { color: var(--gold-light); }
 [data-testid="stTabs"] [aria-selected="true"] {
