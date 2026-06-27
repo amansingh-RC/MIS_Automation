@@ -1,5 +1,3 @@
-"""Self-test for the Factory Inward (GRN) pivot builder."""
-
 import io
 
 import openpyxl

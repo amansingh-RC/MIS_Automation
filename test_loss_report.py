@@ -1,18 +1,9 @@
-"""Self-test for the Loss Report template builder.
-
-Builds a synthetic raw export (original layout: Sample BEFORE Scrap, a preamble
-with dates, and a totals row), processes it, and asserts the output reproduces
-the target "Loss Report Summary" template.
-"""
-
 import io
 
 import openpyxl
 
 from loss_report import process, to_number
 
-# Raw export layout (matches the real .xls): header at row 13, Sample col F,
-# Scrap col G, data starts row 14 with a totals row first.
 RAW_HEADERS = [
     "Wc Name", "Issue Quantity Pg", "Process Quantity Pg",
     "Unutilized Quantity Pg", "Unutilized Quantity Sample Pg",

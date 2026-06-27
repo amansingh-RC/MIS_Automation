@@ -1,5 +1,3 @@
-"""Self-test for the Lot Rejection Report builder + combined workbook."""
-
 import io
 
 import openpyxl

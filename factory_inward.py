@@ -1,23 +1,3 @@
-"""
-Factory Inward (Goods Receipt Note) — pivot summary.
-
-Reads the raw "All Transaction Summary" GRN export, derives a Karat band from
-each row's Variant Name, then pivots to: Sr. No. / Party Name / Karat /
-Net Wt / Pg Wt — ordered by a Party position table — with per-party totals, a
-Grand Total, and a karat-only summary block, matching the target GRN layout.
-
-Karat comes from the Variant Name:
-  * a decimal melting % (e.g. "G-NA-91.80-YG" -> 91.80) classified by the bands
-    24KT 99-100, 22KT 91-92.5, 18KT 74.5-76, 14KT 57.5-59.8; or
-  * a literal "NNKT" (e.g. "PG-NA-24KT-YG" -> 24KT) when no melting % is present.
-
-Sr. No. / ordering:
-  * Parties found in the position table are ordered by ascending Position and
-    numbered with that Position value.
-  * Parties not in the table go after the rest (alphabetically), numbered
-    continuing from the last used number.
-"""
-
 from __future__ import annotations
 
 import re
@@ -173,16 +153,13 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
     if not agg:
         raise LossReportError("Factory Inward: no usable data rows found.")
 
-    # --- order parties + assign Sr. No. -------------------------------------
+    # --- order parties by position table, then number Sr. No. serially ------
     listed = [(positions[p.lower()], p) for p in agg if p.lower() in positions]
     listed.sort(key=lambda x: (x[0], x[1].casefold()))
     unlisted = sorted((p for p in agg if p.lower() not in positions),
                       key=str.casefold)
-    next_no = (max((n for n, _ in listed), default=0) + 1)
-    ordered = [(n, p) for n, p in listed]
-    for p in unlisted:
-        ordered.append((next_no, p))
-        next_no += 1
+    ordered_parties = [p for _, p in listed] + unlisted
+    ordered = [(i, p) for i, p in enumerate(ordered_parties, start=1)]
 
     date_from, date_to = _extract_dates(grid)
     ws = wb.create_sheet("Factory Inward")

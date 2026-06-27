@@ -1,5 +1,3 @@
-"""Self-test for the Scrap + Stock combined report."""
-
 import io
 
 import openpyxl

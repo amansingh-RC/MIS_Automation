@@ -1,17 +1,3 @@
-"""
-Streamlit web app for Royal Chain MIS report automation.
-
-Run with:
-    streamlit run app.py
-
-Each tab is one report tool: upload its file, preview, download just that
-report. The sidebar offers a single "Combined Workbook" download that merges
-every uploaded tab's output sheets into one .xlsx.
-
-Adding a new tool later: write an `add_<name>_sheet(wb, file_bytes)` function in
-its own module, then add one entry to the TOOLS list below.
-"""
-
 from __future__ import annotations
 
 from datetime import date

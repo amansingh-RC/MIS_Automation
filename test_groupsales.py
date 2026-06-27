@@ -1,5 +1,3 @@
-"""Self-test for the Groupsales pivot builder."""
-
 import io
 
 import openpyxl

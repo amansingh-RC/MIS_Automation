@@ -1,12 +1,3 @@
-"""
-Lot Rejection Report.
-
-Reads the raw export (preamble + header at the 'Trans Date' row + a Grand Total
-row) and rebuilds it in the clean target layout: title, date band, a header with
-Operation Name / Wc Name / User Name spanning two columns each, and a recomputed
-Grand Total of Wt.
-"""
-
 from __future__ import annotations
 
 import re

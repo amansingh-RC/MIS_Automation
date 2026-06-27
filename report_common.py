@@ -1,11 +1,3 @@
-"""Shared helpers for building workbooks that hold one or more report sheets.
-
-Each report module exposes an ``add_*_sheet(wb, ...)`` function that appends its
-sheet(s) to a given workbook. That lets us either:
-  * build a single-report workbook (one tab's download), or
-  * build one master workbook with every tab's sheets combined.
-"""
-
 from __future__ import annotations
 
 import io

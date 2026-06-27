@@ -1,17 +1,3 @@
-"""
-Groupsales Reports — pivot summary.
-
-Reads the raw "All Transaction Summary" export, derives a Karat band from each
-row's Metal Fineness, then pivots to: Groupsales -> Karat -> Net Wt / Pg Wt,
-with a Total row per group and a Grand Total, matching the target layout.
-
-Karat is derived from melting % (= Metal Fineness * 100):
-    99.0 - 100.0  -> 24KT
-    91.0 -  92.5  -> 22KT
-    74.5 -  76.0  -> 18KT
-    57.5 -  59.8  -> 14KT
-"""
-
 from __future__ import annotations
 
 import re

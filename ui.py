@@ -1,10 +1,3 @@
-"""
-Shared UI / branding for the RCL MIS Automation app.
-
-Keeps all styling in one place so app.py stays focused on logic and adding a
-new tab is a few lines. Royal Chain palette: deep navy + gold.
-"""
-
 from __future__ import annotations
 
 import base64
