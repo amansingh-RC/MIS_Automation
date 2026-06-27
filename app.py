@@ -8,6 +8,7 @@ import streamlit as st
 import ui
 from factory_inward import (add_factory_inward_sheet, default_positions,
                             load_positions)
+from factory_outward import add_factory_outward_sheet
 from groupsales import add_groupsales_sheet
 from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
@@ -34,13 +35,19 @@ def _add_scrap_stock(wb, file_bytes):
     return add_scrap_stock_sheets(wb, file_bytes, TODAY)
 
 
-def _get_positions():
-    """Session override position table, else the bundled default."""
-    return st.session_state.get("fi_positions") or default_positions()
+def _get_positions(tool_key):
+    """Per-tab session override position table, else the bundled default."""
+    return st.session_state.get(tool_key + "_positions") or default_positions()
 
 
 def _add_factory_inward(wb, file_bytes):
-    return add_factory_inward_sheet(wb, file_bytes, _get_positions(), TODAY_DMY)
+    return add_factory_inward_sheet(
+        wb, file_bytes, _get_positions("factory_inward"), TODAY_DMY)
+
+
+def _add_factory_outward(wb, file_bytes):
+    return add_factory_outward_sheet(
+        wb, file_bytes, _get_positions("factory_outward"), TODAY_DMY)
 
 
 # ===========================================================================
@@ -95,22 +102,24 @@ def _preview_factory(result):
                  hide_index=True)
 
 
-def _factory_extra():
-    """Optional position-table override for the Factory Inward tab."""
+def _factory_extra(spec):
+    """Optional position-table override for a Factory tab (namespaced per tab)."""
+    sess_key = spec["key"] + "_positions"
     with st.expander("Party position table (optional override)"):
         st.caption("By default the bundled position table is used. Upload a "
                    "new one (columns: Name, Position) to override it.")
         pf = st.file_uploader("Position table (.xlsx / .xls)",
-                              type=["xlsx", "xlsm", "xls"], key="fi_pos_upl")
+                              type=["xlsx", "xlsm", "xls"],
+                              key=spec["key"] + "_pos_upl")
         if pf is not None:
             try:
-                st.session_state["fi_positions"] = load_positions(pf.getvalue())
-                st.success(f"Loaded {len(st.session_state['fi_positions'])} "
+                st.session_state[sess_key] = load_positions(pf.getvalue())
+                st.success(f"Loaded {len(st.session_state[sess_key])} "
                            "party positions from the uploaded table.")
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Position table error: {exc}")
         else:
-            st.session_state.pop("fi_positions", None)
+            st.session_state.pop(sess_key, None)
             st.caption(f"Using bundled table "
                        f"({len(default_positions())} parties).")
 
@@ -174,10 +183,22 @@ TOOLS = [
         "subtitle": "Raw GRN export → pivot of Sr. No. / Party Name / Karat / "
                     "Net Wt / Pg Wt, ordered by the party position table.",
         "help": "Karat comes from the Variant Name (decimal melting %, else a "
-                "literal NNKT). Parties are ordered by the position table; "
-                "Sr. No. = position value, and parties not in the table go to "
+                "literal NNKT). Parties are ordered by the position table and "
+                "numbered serially (1, 2, 3…); parties not in the table go to "
                 "the end. Includes a karat-only summary block.",
         "add": _add_factory_inward, "preview": _preview_factory,
+        "extra": _factory_extra,
+    },
+    {
+        "key": "factory_outward", "label": "🚚  Factory Outward",
+        "title": "Factory Outward",
+        "subtitle": "Raw export → pivot of Sr. No. / Party Name / Karat / "
+                    "Net Wt / Pg Wt, ordered by the party position table.",
+        "help": "Same processing as Factory Inward: Karat from the Variant "
+                "Name, parties ordered by the position table and numbered "
+                "serially, with per-party totals, a Grand Total, and a "
+                "karat-only summary block.",
+        "add": _add_factory_outward, "preview": _preview_factory,
         "extra": _factory_extra,
     },
 ]
@@ -192,7 +213,7 @@ def render_tool_tab(spec: dict) -> None:
     with st.expander("How it works"):
         st.markdown(spec["help"])
     if spec.get("extra"):
-        spec["extra"]()
+        spec["extra"](spec)
 
     file = st.file_uploader(
         "Drop the report here  ·  .xls / .xlsx",

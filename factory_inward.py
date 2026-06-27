@@ -113,10 +113,25 @@ def _extract_dates(grid: list[list]) -> tuple[str, str]:
     return fmt(mf), fmt(mt)
 
 
+def _extract_trans_type(grid: list[list]) -> str:
+    text = "\n".join(str(v) for row in grid for v in row
+                     if isinstance(v, str))
+    m = re.search(r"Trans[ \t]*Type[ \t]*:?-?[ \t]*([^\n]+)", text, re.I)
+    return m.group(1).strip() if m else ""
+
+
 def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
                              positions: "OrderedDict[str, int]",
-                             gen_date: str) -> FactoryInwardResult:
-    """Append the 'Factory Inward' GRN pivot sheet to ``wb``."""
+                             gen_date: str, kind: str = "Inward",
+                             default_trans: str = "GOODS RECEIPT NOTE",
+                             sheet_name: str = "Factory Inward"
+                             ) -> FactoryInwardResult:
+    """Append a Factory Inward/Outward pivot sheet to ``wb``.
+
+    ``kind`` ("Inward"/"Outward") and the transaction type (read from the
+    preamble, falling back to ``default_trans``) form the title; the logic is
+    otherwise identical for both reports.
+    """
     grid = _grid_from_bytes(file_bytes)
     header_row, labels = _find_header(grid)
     if header_row is None:
@@ -162,12 +177,13 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
     ordered = [(i, p) for i, p in enumerate(ordered_parties, start=1)]
 
     date_from, date_to = _extract_dates(grid)
-    ws = wb.create_sheet("Factory Inward")
+    trans_type = _extract_trans_type(grid) or default_trans
+    ws = wb.create_sheet(sheet_name)
     last_letter = get_column_letter(_LAST_COL)
 
     # --- Row 1 + 2 ----------------------------------------------------------
     ws.merge_cells(f"A1:{last_letter}1")
-    ws["A1"].value = "Factory Inward ( GOODS RECEIPT NOTE ) Report Summary"
+    ws["A1"].value = f"Factory {kind} ( {trans_type} ) Report Summary"
     ws["A1"].font = Font(name=_FONT, bold=True, size=14)
     ws["A1"].alignment = _CENTER
     ws.merge_cells("A2:C2")
