@@ -10,24 +10,12 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.styles.colors import Color
 from openpyxl.utils import get_column_letter
 
-from groupsales import karat_from_melting
+from groupsales import karat_from_variant
 from loss_report import LossReportError, _grid_from_bytes, to_number
 
 _POSITIONS_PATH = Path(__file__).parent / "assets" / "party_positions.xlsx"
-_KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT"]
-
-
-def karat_from_variant(variant) -> str | None:
-    """Derive the karat band from a Variant Name string."""
-    s = str(variant) if variant is not None else ""
-    m = re.search(r"(\d+\.\d+)", s)            # decimal melting %, e.g. 91.80
-    if m:
-        return karat_from_melting(float(m.group(1)))
-    k = re.search(r"(\d+)\s*KT", s, re.I)      # literal karat, e.g. 24KT
-    if k:
-        band = f"{int(k.group(1))}KT"
-        return band if band in _KARAT_ORDER else None
-    return None
+# "OT" (Other) captures any karat value outside the four standard bands.
+_KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT", "OT"]
 
 
 @dataclass
@@ -156,7 +144,9 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
         party = "" if cell(row, pc) is None else str(cell(row, pc)).strip()
         if not party or party.lower().startswith("grand"):
             continue
-        karat = karat_from_variant(cell(row, vc))
+        # Out-of-band karats are kept as "OT"; only rows with no karat value
+        # at all are skipped.
+        karat = karat_from_variant(cell(row, vc), other="OT")
         if karat is None:
             skipped += 1
             continue

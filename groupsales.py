@@ -12,6 +12,7 @@ from loss_report import LossReportError, _grid_from_bytes, to_number
 
 # Fixed display order of karats within a group (high -> low fineness).
 _KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT"]
+_BANDS = {"24KT", "22KT", "18KT", "14KT"}
 
 
 def karat_from_melting(melting: float) -> str | None:
@@ -23,6 +24,25 @@ def karat_from_melting(melting: float) -> str | None:
         return "18KT"
     if 57.5 <= melting <= 59.8:
         return "14KT"
+    return None
+
+
+def karat_from_variant(variant, other=None) -> str | None:
+    """Karat from a Variant Name.
+
+    Uses a decimal melting % if present (e.g. "G-NA-91.80-YG" -> 91.80), else a
+    literal "NNKT" (e.g. "PG-NA-24KT-YG" -> 24KT). Returns ``other`` when a
+    value is present but falls outside the karat bands; None when no melting /
+    karat value is found at all.
+    """
+    s = str(variant) if variant is not None else ""
+    m = re.search(r"(\d+\.\d+)", s)            # decimal melting %
+    if m:
+        return karat_from_melting(float(m.group(1))) or other
+    k = re.search(r"(\d+)\s*KT", s, re.I)      # literal karat, e.g. 24KT
+    if k:
+        band = f"{int(k.group(1))}KT"
+        return band if band in _BANDS else other
     return None
 
 
@@ -75,9 +95,10 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
             "Groupsales report: missing column(s): " + ", ".join(missing))
     gi, fi = labels["Groupsales"], labels["Metal Fineness"]
     ni, pi = labels["Net Wt"], labels["Pg Wt"]
+    vi = labels.get("Variant Name")            # fallback source for karat
 
     def cell(row, i):
-        return row[i] if i < len(row) else None
+        return row[i] if (i is not None and i < len(row)) else None
 
     agg: "OrderedDict[str, dict]" = OrderedDict()
     skipped = 0
@@ -86,10 +107,14 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
         group = "" if cell(row, gi) is None else str(cell(row, gi)).strip()
         if not group or group.lower().startswith("grand"):
             continue
+        # Karat from Metal Fineness (melting = fineness * 100); if that is blank
+        # or out of band, fall back to the Variant Name (handles pure-gold rows
+        # like "PG-NA-24KT-YG" whose Metal Fineness is blank).
         fineness = to_number(cell(row, fi))
-        if fineness is None:
-            continue
-        karat = karat_from_melting(fineness * 100)
+        karat = (karat_from_melting(fineness * 100)
+                 if fineness is not None else None)
+        if karat is None:
+            karat = karat_from_variant(cell(row, vi))
         if karat is None:
             skipped += 1
             continue

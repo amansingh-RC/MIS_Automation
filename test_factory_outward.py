@@ -21,6 +21,7 @@ def make_input(trans_type: str) -> bytes:
     data = [
         ("Royal Chain Private Limited", "PG-NA-24KT-YG", 100.0, 95.0),
         ("RC-REFINISHING", "G-NA-75.00-RG", 10.0, 7.0),
+        ("RC-REFINISHING", "G-NA-80.00-YG", 5.0, 3.0),   # out of band -> OT
         ("UNKNOWN PARTY", "G-NA-91.80-YG", 5.0, 4.0),
     ]
     r = 13
@@ -55,8 +56,12 @@ def main():
     assert srnos.get("Royal Chain Private Limited") == 1, srnos
     assert srnos.get("RC-REFINISHING") == 2, srnos
     assert srnos.get("UNKNOWN PARTY") == 3, srnos
-    assert abs(result.grand_net - 115.0) < 1e-9, result.grand_net   # 100+10+5
-    print("OK  outward: title from trans type, sheet name, serial Sr.No, totals")
+    assert abs(result.grand_net - 120.0) < 1e-9, result.grand_net   # 100+10+5+5
+    # out-of-band karat kept as "OT" (same as Factory Inward)
+    karats = {ws.cell(row=r, column=3).value for r in range(4, ws.max_row + 1)}
+    assert "OT" in karats, karats
+    assert result.skipped == 0, result.skipped
+    print("OK  outward: title, serial Sr.No, totals, OT for out-of-band")
 
     # Falls back to the default trans type when the preamble lacks it.
     out2, _ = process(make_input(""), positions=positions, gen_date="26-06-2026")

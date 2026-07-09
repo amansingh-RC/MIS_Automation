@@ -12,7 +12,9 @@ def test_variant_karat():
     assert karat_from_variant("PG-NA-99.50-YG") == "24KT"
     assert karat_from_variant("PG-NA-24KT-YG") == "24KT"     # literal fallback
     assert karat_from_variant("G-NA-80.00-YG") is None       # out of band
-    print("OK  karat from variant (decimal % + literal NNKT)")
+    assert karat_from_variant("G-NA-80.00-YG", other="OT") == "OT"
+    assert karat_from_variant("NO-KARAT-HERE", other="OT") is None  # no value
+    print("OK  karat from variant (decimal % + literal NNKT + OT)")
 
 
 def make_input() -> bytes:
@@ -29,6 +31,7 @@ def make_input() -> bytes:
         ("Royal Chain Private Limited", "PG-NA-24KT-YG", 100.0, 95.0),
         ("Royal Chain Private Limited", "G-NA-91.80-YG", 20.0, 18.0),
         ("RC-REFINISHING", "G-NA-75.00-RG", 10.0, 7.0),
+        ("RC-REFINISHING", "G-NA-80.00-YG", 3.0, 2.0),   # out of band -> OT
         ("UNKNOWN PARTY", "G-NA-91.80-YG", 5.0, 4.0),   # not in position table
     ]
     r = 13
@@ -52,11 +55,11 @@ def main():
                                 gen_date="25-06-2026")
 
     assert result.date_from == "24-06-2026", result.date_from
-    assert result.skipped == 0, result.skipped
+    assert result.skipped == 0, result.skipped        # OT row is kept, not skipped
     assert result.unlisted == ["UNKNOWN PARTY"], result.unlisted
-    # grand: net 100+20+10+5 = 135 ; pg 95+18+7+4 = 124
-    assert abs(result.grand_net - 135.0) < 1e-9, result.grand_net
-    assert abs(result.grand_pg - 124.0) < 1e-9, result.grand_pg
+    # grand: net 100+20+10+3+5 = 138 ; pg 95+18+7+2+4 = 126
+    assert abs(result.grand_net - 138.0) < 1e-9, result.grand_net
+    assert abs(result.grand_pg - 126.0) < 1e-9, result.grand_pg
     print("OK  dates, skipped, unlisted, grand totals")
 
     wb = openpyxl.load_workbook(io.BytesIO(out_bytes))
@@ -86,7 +89,9 @@ def main():
             for r in range(4, ws.max_row + 1)]
     assert any(t[1] == "Grand Total" for t in flat)
     assert any(t[2] == "KARAT" for t in flat)         # block header
-    print("OK  grand total + karat summary block")
+    # out-of-band karat kept as "OT"
+    assert "OT" in {t[2] for t in flat if t[2]}, flat
+    print("OK  grand total + karat summary block + OT")
 
     # pivot only — no detail sheet
     assert wb.sheetnames == ["Factory Inward"], wb.sheetnames
