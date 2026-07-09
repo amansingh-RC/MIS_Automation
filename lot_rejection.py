@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-
 from loss_report import LossReportError, _grid_from_bytes, to_number
 from report_common import fmt_date
 
@@ -18,9 +17,6 @@ class LotRejectionResult:
     date_from: str
     date_to: str
 
-
-# Output layout: single-column fields (label -> output column) and the
-# three two-column merged fields (label -> (left_col, right_col)).
 _SINGLE = [
     ("Trans Date", 1), ("Order No", 2), ("Group No", 3), ("Style Name", 4),
     ("Karat", 5), ("Wt", 6), ("Remark", 13),

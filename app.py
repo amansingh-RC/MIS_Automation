@@ -172,9 +172,10 @@ TOOLS = [
         "title": "Groupsales Reports",
         "subtitle": "Raw export → pivot of Groupsales → Karat → Net Wt / Pg Wt "
                     "with per-group and grand totals.",
-        "help": "Karat is derived from melting % (Metal Fineness × 100): "
-                "24KT 99–100, 22KT 91–92.5, 18KT 74.5–76, 14KT 57.5–59.8. "
-                "Groups are listed alphabetically.",
+        "help": "Karat is derived from Metal Fineness × 100 (fallback: Variant "
+                "Name): 24KT 99–100, 22KT 91–92.5, 18KT 74.5–76, 14KT "
+                "57.5–59.8. Rows with a blank Groupsales are grouped under "
+                "\"(blank)\".",
         "add": add_groupsales_sheet, "preview": _preview_groupsales,
     },
     {

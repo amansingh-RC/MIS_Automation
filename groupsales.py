@@ -10,8 +10,8 @@ from openpyxl.styles.colors import Color
 
 from loss_report import LossReportError, _grid_from_bytes, to_number
 
-# Fixed display order of karats within a group (high -> low fineness).
-_KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT"]
+# Display order of karats within a group (ascending, matches the target report).
+_KARAT_ORDER = ["14KT", "18KT", "22KT", "24KT"]
 _BANDS = {"24KT", "22KT", "18KT", "14KT"}
 
 
@@ -105,7 +105,7 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
     for r in range(header_row + 1, len(grid)):
         row = grid[r]
         group = "" if cell(row, gi) is None else str(cell(row, gi)).strip()
-        if not group or group.lower().startswith("grand"):
+        if group.lower().startswith("grand"):
             continue
         # Karat from Metal Fineness (melting = fineness * 100); if that is blank
         # or out of band, fall back to the Variant Name (handles pure-gold rows
@@ -116,12 +116,15 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
         if karat is None:
             karat = karat_from_variant(cell(row, vi))
         if karat is None:
+            # No usable karat -> not a real data row (empty/spacer rows too).
             skipped += 1
             continue
+        # Rows with a blank Groupsales are still counted, under "(blank)".
+        key = group if group else "(blank)"
         net = to_number(cell(row, ni)) or 0.0
         pg = to_number(cell(row, pi)) or 0.0
-        agg.setdefault(group, {})
-        bucket = agg[group].setdefault(karat, [0.0, 0.0])
+        agg.setdefault(key, {})
+        bucket = agg[key].setdefault(karat, [0.0, 0.0])
         bucket[0] += net
         bucket[1] += pg
     if not agg:
@@ -162,11 +165,11 @@ def add_groupsales_sheet(wb: openpyxl.Workbook,
         cell.alignment = _CENTER
         cell.fill = _HEAD_FILL
 
-    # --- Data (alphabetical groups, fixed karat order) ----------------------
+    # --- Data (groups in data/first-appearance order, ascending karat) ------
     preview: list[dict] = []
     grand_net = grand_pg = 0.0
     out = 4
-    for group in sorted(agg, key=lambda s: s.casefold()):
+    for group in agg:
         karats = [k for k in _KARAT_ORDER if k in agg[group]]
         g_net = g_pg = 0.0
         for i, karat in enumerate(karats):
