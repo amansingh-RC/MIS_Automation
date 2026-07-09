@@ -32,6 +32,8 @@ def make_input() -> bytes:
         ("ALPHA", 0.80, "", 5.0, 4.0),       # out of band, no variant -> skipped
         ("ZETA", None, "PG-NA-24KT-YG", 30.0, 28.0),  # 24KT via Variant Name
         ("", 0.999, "", 40.0, 38.0),         # blank Groupsales -> "(blank)", 24KT
+        # Variant Name decides karat: 99.00 -> 24KT even though fineness=0.75(18KT)
+        ("GAMMA", 0.75, "G-NA-99.00-YG", 10.0, 9.0),
     ]
     r = 13
     for group, fin, var, net, pg in data:
@@ -54,9 +56,9 @@ def main():
 
     assert result.date == "24.06.2026", result.date
     assert result.skipped == 1, result.skipped              # the 0.80 row
-    # grand: net 100+20+10+30+40 = 200 ; pg 90+15+8+28+38 = 179
-    assert abs(result.grand_net - 200.0) < 1e-9, result.grand_net
-    assert abs(result.grand_pg - 179.0) < 1e-9, result.grand_pg
+    # grand: net 100+20+10+30+40+10 = 210 ; pg 90+15+8+28+38+9 = 188
+    assert abs(result.grand_net - 210.0) < 1e-9, result.grand_net
+    assert abs(result.grand_pg - 188.0) < 1e-9, result.grand_pg
     print("OK  date, skipped, grand totals")
 
     wb = openpyxl.load_workbook(io.BytesIO(out_bytes))
@@ -86,11 +88,18 @@ def main():
     assert ws.cell(row=blank, column=2).value == "24KT"
     assert abs(ws.cell(row=blank, column=3).value - 40.0) < 1e-9
 
+    # Variant Name decides karat: GAMMA's "G-NA-99.00-YG" -> 24KT (NOT 18KT
+    # from its Metal Fineness 0.75)
+    gamma = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "GAMMA")
+    assert ws.cell(row=gamma, column=2).value == "24KT", \
+        ws.cell(row=gamma, column=2).value
+
     # last row grand total
     gt = ws.max_row
     assert ws.cell(row=gt, column=1).value == "Grand Total"
-    assert abs(ws.cell(row=gt, column=3).value - 200.0) < 1e-9
-    print("OK  layout, first-appearance order, ascending karat, (blank) group")
+    assert abs(ws.cell(row=gt, column=3).value - 210.0) < 1e-9
+    print("OK  layout, order, ascending karat, (blank) group, variant-decides")
 
     # pivot only — no detail sheet
     assert wb.sheetnames == ["Groupsales Reports"], wb.sheetnames

@@ -88,14 +88,14 @@ def _extract_date(grid: list[list]) -> str:
 
 
 def _aggregate(grid: list[list], labels: dict, header_row: int):
-    need = ("Groupsales", "Metal Fineness", "Net Wt", "Pg Wt")
+    need = ("Groupsales", "Variant Name", "Net Wt", "Pg Wt")
     missing = [c for c in need if c not in labels]
     if missing:
         raise LossReportError(
             "Groupsales report: missing column(s): " + ", ".join(missing))
-    gi, fi = labels["Groupsales"], labels["Metal Fineness"]
+    gi, vi = labels["Groupsales"], labels["Variant Name"]
     ni, pi = labels["Net Wt"], labels["Pg Wt"]
-    vi = labels.get("Variant Name")            # fallback source for karat
+    fi = labels.get("Metal Fineness")          # optional, last-resort only
 
     def cell(row, i):
         return row[i] if (i is not None and i < len(row)) else None
@@ -107,14 +107,16 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
         group = "" if cell(row, gi) is None else str(cell(row, gi)).strip()
         if group.lower().startswith("grand"):
             continue
-        # Karat from Metal Fineness (melting = fineness * 100); if that is blank
-        # or out of band, fall back to the Variant Name (handles pure-gold rows
-        # like "PG-NA-24KT-YG" whose Metal Fineness is blank).
-        fineness = to_number(cell(row, fi))
-        karat = (karat_from_melting(fineness * 100)
-                 if fineness is not None else None)
+        # Karat is decided by the Variant Name: the melting number in it
+        # ("G-NA-99.00-YG" -> 99 -> 24KT) or a literal karat ("PG-NA-24KT-YG").
+        # Metal Fineness is used only as a last resort when the Variant Name
+        # carries no karat info at all (avoids dropping such rows).
+        karat = karat_from_variant(cell(row, vi))
         if karat is None:
-            karat = karat_from_variant(cell(row, vi))
+            fineness = to_number(cell(row, fi))
+            if fineness is not None:
+                melting = fineness * 100 if fineness <= 2 else fineness
+                karat = karat_from_melting(melting)
         if karat is None:
             # No usable karat -> not a real data row (empty/spacer rows too).
             skipped += 1

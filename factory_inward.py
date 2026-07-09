@@ -63,7 +63,11 @@ def load_positions(file_bytes: bytes) -> "OrderedDict[str, int]":
 
 
 def default_positions() -> "OrderedDict[str, int]":
-    return load_positions(_POSITIONS_PATH.read_bytes())
+    """Bundled position table; empty (no crash) if the file is missing."""
+    try:
+        return load_positions(_POSITIONS_PATH.read_bytes())
+    except OSError:
+        return OrderedDict()
 
 
 # ---------------------------------------------------------------------------
