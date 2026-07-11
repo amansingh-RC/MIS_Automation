@@ -52,8 +52,10 @@ _VALUE_HEADERS = {
     "losspgwt": "loss_pg",
 }
 
-# Operations that are genuine filling work; anything else is a "double entry".
+# Operations that are genuine process work; anything else is a "double entry".
+# One set per report family (upper-cased for comparison).
 _FILLING_OPS = {"B-GOLD-FILING", "CAST-FILLING"}
+_BUFFING_OPS = {"B-GOLD-BUFFING", "BUFFING-2"}
 _REP_PREFIX = "REP"
 
 _REMARK_ORDER = ["FINISH", "DOUBLE ENTRY", "REP"]
@@ -134,7 +136,7 @@ def _is_blank_batch(batch) -> bool:
     return batch in (None, "") or str(batch).strip().upper() == "NONE"
 
 
-def _build_rows(grid, header_row, fill, values, variant_col):
+def _build_rows(grid, header_row, fill, values, variant_col, ops):
     """Parse the data rows, forward-filling the descriptive block, and derive
     Karat, Roundup, minifs, Roundup2 and the remark for each row."""
 
@@ -190,26 +192,27 @@ def _build_rows(grid, header_row, fill, values, variant_col):
             m["roundup2"] = m["roundup"] - lo
             m["countif"] = len(members)
 
-    _assign_remarks(rows)
+    _assign_remarks(rows, ops)
     return rows, skipped
 
 
-def _assign_remarks(rows: list[dict]) -> None:
+def _assign_remarks(rows: list[dict], ops: set) -> None:
     """Fill the ``remark`` column by running the reference steps 11-16 one after
-    another, in order — exactly the sequence done by hand in Excel."""
+    another, in order — exactly the sequence done by hand in Excel. ``ops`` is
+    the set of genuine process operations for this report (upper-cased)."""
     for d in rows:
         d["remark"] = None
 
-    # Step 11: Wc Name = REP-GOLD-FILLING-WK  ->  REP
+    # Step 11: Wc Name = REP-... (repair work centre)  ->  REP
     for d in rows:
         if str(d["wc"] or "").strip().upper().startswith(_REP_PREFIX):
             d["remark"] = "REP"
 
-    # Step 12: Operation other than B-GOLD-FILING / CAST-FILLING  ->  DOUBLE
+    # Step 12: Operation other than the genuine process operations  ->  DOUBLE
     # ENTRY (leave the REP rows already set by step 11 untouched).
     for d in rows:
         if d["remark"] is None and \
-                str(d["oper"] or "").strip().upper() not in _FILLING_OPS:
+                str(d["oper"] or "").strip().upper() not in ops:
             d["remark"] = "DOUBLE ENTRY"
 
     # Step 13: Roundup2 = 0 (rows not already REP / double-entry)  ->  FINISH
@@ -291,10 +294,11 @@ _WORK_COLS = [
 ] + list(_VALUE_FIELDS)
 
 
-def _add_working_sheet(wb: openpyxl.Workbook, rows: list[dict]) -> None:
+def _add_working_sheet(wb: openpyxl.Workbook, rows: list[dict],
+                       sheet_name: str) -> None:
     """Write the full row-by-row detail after steps 1-16 so the output can be
     verified column-by-column against the source 'working file' subsheet."""
-    ws = wb.create_sheet("Working (steps 1-16)")
+    ws = wb.create_sheet(sheet_name)
     for c, (_key, label) in enumerate(_WORK_COLS, start=1):
         cell = ws.cell(row=1, column=c, value=label)
         cell.font = Font(name=_FONT, bold=True, size=9)
@@ -318,15 +322,22 @@ def _add_working_sheet(wb: openpyxl.Workbook, rows: list[dict]) -> None:
             openpyxl.utils.get_column_letter(c)].width = 12
 
 
-def add_filling_loss_sheet(wb: openpyxl.Workbook,
-                           file_bytes: bytes) -> FillingLossResult:
-    """Append the 'Filling Loss & Recovery Report' pivot sheet to ``wb``."""
+def add_recovery_sheet(wb: openpyxl.Workbook, file_bytes: bytes, *,
+                       ops: set = _FILLING_OPS,
+                       sheet_name: str = "Filling Loss & Recovery Report",
+                       working_name: str = "Filling Working (steps 1-16)",
+                       title_override: str | None = None) -> FillingLossResult:
+    """Append a Loss & Recovery pivot sheet (and a step-by-step Working sheet)
+    to ``wb``. The whole pipeline is shared by Filling, Gold Buffing and Cast
+    Gold Buffing; only ``ops`` (genuine operations), the sheet names and the
+    report title differ.
+    """
     grid = _grid_from_bytes(file_bytes)
     header_row, fill, values, variant_col = _find_header(grid)
     if header_row is None:
         raise LossReportError(
             "Could not find a header row with 'Batch No', 'Wc Name' and "
-            "'Variant Name'. Please upload the GOLD-FILLING loss export."
+            "'Variant Name'. Please upload the correct loss & gain export."
         )
     missing = [lbl for key, lbl in _VALUE_FIELDS if key not in values]
     if missing:
@@ -334,12 +345,15 @@ def add_filling_loss_sheet(wb: openpyxl.Workbook,
             "These weight column(s) were not found: " + ", ".join(missing))
 
     title, date_range = _extract_meta(grid)
-    rows, skipped = _build_rows(grid, header_row, fill, values, variant_col)
+    if title_override:
+        title = title_override
+    rows, skipped = _build_rows(
+        grid, header_row, fill, values, variant_col, ops)
     agg = _pivot(rows)
 
     n_cols = 2 + len(_VALUE_FIELDS)          # remark + karat + 12 values
     last_col = openpyxl.utils.get_column_letter(n_cols)
-    ws = wb.create_sheet("Filling Loss & Recovery Report")
+    ws = wb.create_sheet(sheet_name)
 
     # --- Title + date band --------------------------------------------------
     ws.merge_cells(f"A1:{last_col}1")
@@ -441,12 +455,45 @@ def add_filling_loss_sheet(wb: openpyxl.Workbook,
     ws.freeze_panes = ws.cell(row=hr + 1, column=1)
 
     # Transparency sheet (steps 1-16), verifiable vs the source 'working file'.
-    _add_working_sheet(wb, rows)
+    _add_working_sheet(wb, rows, working_name)
 
     return FillingLossResult(
         rows=preview, grand={k: round(grand[k], 3) for k, _ in _VALUE_FIELDS},
         title=title, date_range=date_range, remark_counts=remark_counts,
         skipped=skipped)
+
+
+def add_filling_loss_sheet(wb: openpyxl.Workbook,
+                           file_bytes: bytes) -> FillingLossResult:
+    """Append the 'Filling Loss & Recovery Report' sheet to ``wb``."""
+    return add_recovery_sheet(
+        wb, file_bytes, ops=_FILLING_OPS,
+        sheet_name="Filling Loss & Recovery Report",
+        working_name="Filling Working (steps 1-16)")
+
+
+def add_gold_buffing_sheet(wb: openpyxl.Workbook,
+                           file_bytes: bytes) -> FillingLossResult:
+    """Append the Gold Buffing Loss & Recovery sheet to ``wb`` (tab names are
+    kept within Excel's 31-character limit; the in-sheet title is the full
+    'GOLD BUFFING - Loss & Recovery Report')."""
+    return add_recovery_sheet(
+        wb, file_bytes, ops=_BUFFING_OPS,
+        sheet_name="Gold Buffing Loss & Recovery",
+        working_name="Gold Buffing Working",
+        title_override="GOLD BUFFING")
+
+
+def add_cast_gold_buffing_sheet(wb: openpyxl.Workbook,
+                                file_bytes: bytes) -> FillingLossResult:
+    """Append the Cast Gold Buffing Loss & Recovery sheet to ``wb`` (tab names
+    kept within Excel's 31-character limit; the in-sheet title is the full
+    'CAST GOLD BUFFING - Loss & Recovery Report')."""
+    return add_recovery_sheet(
+        wb, file_bytes, ops=_BUFFING_OPS,
+        sheet_name="Cast Gold Buffing Recovery",
+        working_name="Cast Gold Buffing Working",
+        title_override="CAST GOLD BUFFING")
 
 
 def process(file_bytes: bytes) -> tuple[bytes, FillingLossResult]:

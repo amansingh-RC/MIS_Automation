@@ -2,7 +2,9 @@ import io
 
 import openpyxl
 
-from filling_loss import _dedup_finish, _roundup, process
+from filling_loss import (_dedup_finish, _roundup, add_gold_buffing_sheet,
+                          process)
+from report_common import new_workbook, workbook_bytes
 
 # Column layout of the raw GOLD-FILLING export (1-based), matching the real
 # file: descriptive block in A..H, weights spread across the rest.
@@ -111,9 +113,59 @@ def test_dedup_finish_multiway():
     print("OK  step 15 dedup — multi-way tie keeps exactly one FINISH")
 
 
+def make_buffing_input() -> bytes:
+    """Buffing export: same columns as filling, but buffing operations, a
+    'REPAIR-...' repair WC, and an ancillary operation that must become a
+    double entry via step 12."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["B6"] = "OPERATION WISE-LOSS & GAIN NEW"
+    ws["B9"] = ("WC Group Type :- \nWC Group :- GOLD-BUFFING-HOD\n"
+                "From Date :- 01/06/2026\nTo Date :- 30/06/2026\n")
+    for c, label in _HEADERS.items():
+        ws.cell(row=12, column=c, value=label)
+    r = 13
+    # Genuine buffing op, single-row batch -> FINISH
+    _row(ws, r, created="A", batch="B-1", oper="B-GOLD-BUFFING",
+         wc="GOLD-BUFFING-WK", variant="G-NA-91.70-YG",
+         issue_g=100.0, ret_pg=50.0, loss_pg=1.0); r += 1
+    # Second genuine buffing op (Buffing-2) -> FINISH
+    _row(ws, r, created="A", batch="B-2", oper="Buffing-2",
+         wc="GOLD-BUFFING-WK", variant="G-NA-75.00-YG",
+         issue_g=40.0, ret_pg=30.0, loss_pg=2.0); r += 1
+    # Ancillary operation (not buffing) -> DOUBLE ENTRY via step 12
+    _row(ws, r, created="A", batch="B-3", oper="FOR EMPTY BATCH",
+         wc="GOLD-BUFFING-WK", variant="G-NA-91.70-YG",
+         issue_g=7.0, ret_pg=6.0, loss_pg=0.3); r += 1
+    # Repair work centre -> REP
+    _row(ws, r, created="A", batch="B-4", oper="B-GOLD-BUFFING",
+         wc="REPAIR-GOLD-BUFFING-WK", variant="G-NA-91.70-YG",
+         issue_g=5.0, ret_pg=4.0, loss_pg=0.1); r += 1
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_gold_buffing():
+    wb = new_workbook()
+    res = add_gold_buffing_sheet(wb, make_buffing_input())
+    out = workbook_bytes(wb)
+    assert res.title == "GOLD BUFFING", res.title
+    # B-1, B-2 genuine -> FINISH; B-3 ancillary op -> DOUBLE ENTRY; B-4 -> REP
+    assert res.remark_counts.get("FINISH") == 2, res.remark_counts
+    assert res.remark_counts.get("DOUBLE ENTRY") == 1, res.remark_counts
+    assert res.remark_counts.get("REP") == 1, res.remark_counts
+    names = openpyxl.load_workbook(io.BytesIO(out)).sheetnames
+    assert names == ["Gold Buffing Loss & Recovery",
+                     "Gold Buffing Working"], names
+    assert all(len(n) <= 31 for n in names), names
+    print("OK  gold buffing — operation double-entry, REP, ≤31-char tabs")
+
+
 def main():
     test_roundup()
     test_dedup_finish_multiway()
+    test_gold_buffing()
     out_bytes, res = process(make_input())
 
     assert res.title == "FILLING", res.title
@@ -136,7 +188,7 @@ def main():
 
     wb = openpyxl.load_workbook(io.BytesIO(out_bytes))
     assert wb.sheetnames == ["Filling Loss & Recovery Report",
-                             "Working (steps 1-16)"], wb.sheetnames
+                             "Filling Working (steps 1-16)"], wb.sheetnames
     ws = wb["Filling Loss & Recovery Report"]
     assert ws["A1"].value == "FILLING - Loss & Recovery Report"
     assert ws["A3"].value == "remark" and ws["B3"].value == "Karat"

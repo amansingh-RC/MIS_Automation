@@ -9,7 +9,8 @@ import ui
 from factory_inward import (add_factory_inward_sheet, default_positions,
                             load_positions)
 from factory_outward import add_factory_outward_sheet
-from filling_loss import add_filling_loss_sheet
+from filling_loss import (add_cast_gold_buffing_sheet, add_filling_loss_sheet,
+                          add_gold_buffing_sheet)
 from groupsales import add_groupsales_sheet
 from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
@@ -197,6 +198,36 @@ TOOLS = [
                 "else DOUBLE ENTRY. The pivot sums the 12 weight columns by "
                 "remark and karat.",
         "add": add_filling_loss_sheet, "preview": _preview_filling_loss,
+    },
+    {
+        "key": "gold_buffing", "label": "✨  Gold Buffing",
+        "title": "Gold Buffing Loss & Recovery Report",
+        "subtitle": "Raw GOLD-BUFFING loss export → remark × karat pivot of "
+                    "Issue / Return / Unutilized / Loss weights.",
+        "help": "Same process as Filling Loss & Recovery, on the buffing data. "
+                "Continuation rows inherit the batch/operation/WC above. Karat "
+                "comes from the Variant Name. **Roundup** = ROUNDUP(Return Pg, "
+                "3); **Roundup2** = Roundup − MINIFS(Roundup by Batch). "
+                "**Remark**: REP (REPAIR-GOLD-BUFFING-WK), else DOUBLE ENTRY "
+                "for operations other than B-GOLD-BUFFING / Buffing-2 or NONE "
+                "batches, else FINISH when Roundup2 = 0 (one FINISH kept per "
+                "batch), else DOUBLE ENTRY.",
+        "add": add_gold_buffing_sheet, "preview": _preview_filling_loss,
+    },
+    {
+        "key": "cast_gold_buffing", "label": "🪞  Cast Gold Buffing",
+        "title": "Cast Gold Buffing Loss & Recovery Report",
+        "subtitle": "Raw CAST GOLD BUFFING loss export → remark × karat pivot "
+                    "of Issue / Return / Unutilized / Loss weights.",
+        "help": "Same process as Filling Loss & Recovery, on the cast gold "
+                "buffing data. Continuation rows inherit the batch/operation/"
+                "WC above. Karat comes from the Variant Name. **Roundup** = "
+                "ROUNDUP(Return Pg, 3); **Roundup2** = Roundup − MINIFS(Roundup "
+                "by Batch). **Remark**: REP (REPAIR CAST GOLD BUFFING WK), else "
+                "DOUBLE ENTRY for operations other than B-GOLD-BUFFING / "
+                "Buffing-2 or NONE batches, else FINISH when Roundup2 = 0 (one "
+                "FINISH kept per batch), else DOUBLE ENTRY.",
+        "add": add_cast_gold_buffing_sheet, "preview": _preview_filling_loss,
     },
     {
         "key": "factory_inward", "label": "  Factory Inward",
