@@ -9,6 +9,7 @@ import ui
 from factory_inward import (add_factory_inward_sheet, default_positions,
                             load_positions)
 from factory_outward import add_factory_outward_sheet
+from filling_loss import add_filling_loss_sheet
 from groupsales import add_groupsales_sheet
 from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
@@ -124,6 +125,21 @@ def _factory_extra(spec):
                        f"({len(default_positions())} parties).")
 
 
+def _preview_filling_loss(result):
+    note = f"  ·  {result.date_range}" if result.date_range else ""
+    counts = "  ·  ".join(f"{k}: {v}" for k, v in result.remark_counts.items())
+    msg = (f"Grand Total — Issue Pg: {result.grand['issue_pg']:,.3f}  ·  "
+           f"Return Pg: {result.grand['ret_pg']:,.3f}  ·  "
+           f"Loss Pg: {result.grand['loss_pg']:,.3f}{note}")
+    if counts:
+        msg += f"  ·  {counts}"
+    if result.skipped:
+        msg += f"  ·  {result.skipped} row(s) with no karat"
+    st.success(msg)
+    st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
+                 hide_index=True)
+
+
 def _preview_groupsales(result):
     note = f"  ·  Date: {result.date}" if result.date else ""
     msg = (f"Grand Total — Net Wt: {result.grand_net:,.3f}  ·  "
@@ -177,6 +193,21 @@ TOOLS = [
                 "57.5–59.8. Rows with a blank Groupsales are grouped under "
                 "\"(blank)\".",
         "add": add_groupsales_sheet, "preview": _preview_groupsales,
+    },
+    {
+        "key": "filling_loss", "label": "🔥  Filling Loss & Recovery",
+        "title": "Filling Loss & Recovery Report",
+        "subtitle": "Raw GOLD-FILLING loss export → remark × karat pivot of "
+                    "Issue / Return / Unutilized / Loss weights.",
+        "help": "Continuation rows inherit the batch/operation/WC above. Karat "
+                "comes from the Variant Name. **Roundup** = ROUNDUP(Return Pg, "
+                "3); **Roundup2** = Roundup − MINIFS(Roundup by Batch). "
+                "**Remark**: REP (REP-GOLD-FILLING-WK), else DOUBLE ENTRY for "
+                "non B-GOLD-FILING / CAST-FILLING operations or NONE batches, "
+                "else FINISH when Roundup2 = 0 (one FINISH kept per batch), "
+                "else DOUBLE ENTRY. The pivot sums the 12 weight columns by "
+                "remark and karat.",
+        "add": add_filling_loss_sheet, "preview": _preview_filling_loss,
     },
     {
         "key": "factory_inward", "label": "🏭  Factory Inward",
