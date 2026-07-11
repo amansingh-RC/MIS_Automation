@@ -5,8 +5,6 @@ from datetime import date, datetime, timedelta
 
 import openpyxl
 
-# Excel's 1900 date system epoch (openpyxl/Excel treat 1900 as a leap year, so
-# the usable epoch for serial->date is 1899-12-30).
 _EXCEL_EPOCH = datetime(1899, 12, 30)
 
 

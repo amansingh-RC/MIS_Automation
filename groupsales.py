@@ -107,10 +107,7 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
         group = "" if cell(row, gi) is None else str(cell(row, gi)).strip()
         if group.lower().startswith("grand"):
             continue
-        # Karat is decided by the Variant Name: the melting number in it
-        # ("G-NA-99.00-YG" -> 99 -> 24KT) or a literal karat ("PG-NA-24KT-YG").
-        # Metal Fineness is used only as a last resort when the Variant Name
-        # carries no karat info at all (avoids dropping such rows).
+
         karat = karat_from_variant(cell(row, vi))
         if karat is None:
             fineness = to_number(cell(row, fi))

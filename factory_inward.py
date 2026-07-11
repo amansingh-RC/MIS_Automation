@@ -29,10 +29,6 @@ class FactoryInwardResult:
     skipped: int               # rows whose variant matched no karat band
 
 
-# ---------------------------------------------------------------------------
-# Position table
-# ---------------------------------------------------------------------------
-
 def load_positions(file_bytes: bytes) -> "OrderedDict[str, int]":
     """Parse a position table into {name_lower: position} (min on duplicates)."""
     grid = _grid_from_bytes(file_bytes)
@@ -68,11 +64,6 @@ def default_positions() -> "OrderedDict[str, int]":
         return load_positions(_POSITIONS_PATH.read_bytes())
     except OSError:
         return OrderedDict()
-
-
-# ---------------------------------------------------------------------------
-# Styling (matches the GRN target)
-# ---------------------------------------------------------------------------
 
 _THIN = Side(style="thin", color="000000")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
@@ -140,7 +131,7 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
     def cell(row, i):
         return row[i] if i < len(row) else None
 
-    # --- aggregate: party -> karat -> [net, pg] -----------------------------
+    # --- aggregate: party -> karat -> [net, pg]
     agg: "OrderedDict[str, dict]" = OrderedDict()
     skipped = 0
     for r in range(header_row + 1, len(grid)):
@@ -175,7 +166,6 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
     ws = wb.create_sheet(sheet_name)
     last_letter = get_column_letter(_LAST_COL)
 
-    # --- Row 1 + 2 ----------------------------------------------------------
     ws.merge_cells(f"A1:{last_letter}1")
     ws["A1"].value = f"Factory {kind} ( {trans_type} ) Report Summary"
     ws["A1"].font = Font(name=_FONT, bold=True, size=14)
@@ -188,7 +178,6 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
         ws[addr].font = Font(name=_FONT, bold=True, size=12)
         ws[addr].alignment = _CENTER
 
-    # --- Row 3 header -------------------------------------------------------
     for col, label in enumerate(("Sr. No.", "Party Name", "KARAT",
                                  "Net Wt", "Pg Wt"), start=1):
         c = ws.cell(row=3, column=col, value=label)

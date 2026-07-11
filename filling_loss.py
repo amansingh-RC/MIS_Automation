@@ -12,12 +12,6 @@ from openpyxl.styles.colors import Color
 from groupsales import karat_from_variant
 from loss_report import LossReportError, _grid_from_bytes, to_number
 
-# ---------------------------------------------------------------------------
-# Column model
-# ---------------------------------------------------------------------------
-# Descriptive columns that are forward-filled on "continuation" rows (rows where
-# only the weight columns carry a value and the whole descriptive block is blank
-# because the source export split one logical transaction across two rows).
 _FILL_FIELDS = {
     "created": "created by",
     "tdate": "trans date",
@@ -27,7 +21,6 @@ _FILL_FIELDS = {
     "wc": "wc name",
 }
 
-# The 12 weight columns aggregated into the pivot, in report order.
 _VALUE_FIELDS = [
     ("issue_g", "Issue Gms Wt"),
     ("issue_pg", "Issue Pg"),
@@ -63,8 +56,6 @@ _VALUE_HEADERS = {
 _FILLING_OPS = {"B-GOLD-FILING", "CAST-FILLING"}
 _REP_PREFIX = "REP"
 
-# Remark groups in the order the final report lists them, and karat order
-# within each group (descending, matching the reference final file).
 _REMARK_ORDER = ["FINISH", "DOUBLE ENTRY", "REP"]
 _KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT"]
 
@@ -79,9 +70,6 @@ class FillingLossResult:
     skipped: int = 0                    # data rows with no resolvable karat
 
 
-# ---------------------------------------------------------------------------
-# Parsing helpers
-# ---------------------------------------------------------------------------
 def _norm(value) -> str:
     if value is None:
         return ""
@@ -146,9 +134,6 @@ def _is_blank_batch(batch) -> bool:
     return batch in (None, "") or str(batch).strip().upper() == "NONE"
 
 
-# ---------------------------------------------------------------------------
-# Core processing (parse -> rows with remark -> pivot)
-# ---------------------------------------------------------------------------
 def _build_rows(grid, header_row, fill, values, variant_col):
     """Parse the data rows, forward-filling the descriptive block, and derive
     Karat, Roundup, minifs, Roundup2 and the remark for each row."""
@@ -195,8 +180,6 @@ def _build_rows(grid, header_row, fill, values, variant_col):
         raise LossReportError(
             "Found the header but no data rows to process.")
 
-    # minifs (min Roundup per batch), Roundup2 (Roundup - minifs) and count if
-    # (how many rows share this batch no.).
     groups: "defaultdict[object, list]" = defaultdict(list)
     for d in rows:
         groups[d["batch"]].append(d)
@@ -283,9 +266,6 @@ def _pivot(rows: list[dict]):
     return agg
 
 
-# ---------------------------------------------------------------------------
-# Styling
-# ---------------------------------------------------------------------------
 _THIN = Side(style="thin", color="000000")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _HEAD_FILL = PatternFill("solid", fgColor=Color(theme=0, tint=-0.249977111117893))

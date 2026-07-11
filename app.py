@@ -28,10 +28,6 @@ XLSX_MIME = ("application/vnd.openxmlformats-officedocument"
 TODAY = date.today().isoformat()
 TODAY_DMY = date.today().strftime("%d-%m-%Y")
 
-
-# ===========================================================================
-# Per-tool sheet adders (signature: (workbook, file_bytes) -> result)
-# ===========================================================================
 def _add_scrap_stock(wb, file_bytes):
     return add_scrap_stock_sheets(wb, file_bytes, TODAY)
 
@@ -51,9 +47,6 @@ def _add_factory_outward(wb, file_bytes):
         wb, file_bytes, _get_positions("factory_outward"), TODAY_DMY)
 
 
-# ===========================================================================
-# Per-tool preview renderers (result -> Streamlit output)
-# ===========================================================================
 def _preview_loss(result):
     note = (f"  ·  Dates: {result.date_from} → {result.date_to}"
             if (result.date_from or result.date_to) else "")
@@ -67,12 +60,12 @@ def _preview_loss(result):
 
 def _preview_scrap_stock(result):
     st.success("Both reports generated (2 sheets).")
-    st.markdown("##### ♻️ Scrap Report")
+    st.markdown("#####  Scrap Report")
     a, b, c = st.columns(3)
     a.metric("Scrap rows", f"{result['scrap_rows']:,}")
     b.metric("Gross Weight", f"{result['scrap_gross']:,.3f}")
     c.metric("Metal Weight", f"{result['scrap_metal']:,.3f}")
-    st.markdown("##### 📦 Stock Report")
+    st.markdown("#####  Stock Report")
     d, e, f = st.columns(3)
     d.metric("Rows after filtering", f"{result['stock_filtered']:,}")
     e.metric("WC Groups", f"{result['stock_groups']:,}")
@@ -150,13 +143,9 @@ def _preview_groupsales(result):
     st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
                  hide_index=True)
 
-
-# ===========================================================================
-# Tool registry — add a dict here to add a new tab.
-# ===========================================================================
 TOOLS = [
     {
-        "key": "loss", "label": "📉  Loss Report", "title": "Loss Report",
+        "key": "loss", "label": "  Loss Report", "title": "Loss Report",
         "subtitle": "Raw export → formatted Loss Report Summary with "
                     "Final Loss and Loss %.",
         "help": "**Final Loss** = Loss Quantity + Gain Pg.  \n"
@@ -165,7 +154,7 @@ TOOLS = [
         "add": add_loss_sheet, "preview": _preview_loss,
     },
     {
-        "key": "scrap_stock", "label": "♻️  Scrap + Stock",
+        "key": "scrap_stock", "label": "  Scrap + Stock",
         "title": "Scrap + Stock Report",
         "subtitle": "One daily export → one workbook with SCRAP REPORT and "
                     "STOCK REPORT sheets.",
@@ -175,7 +164,7 @@ TOOLS = [
         "add": _add_scrap_stock, "preview": _preview_scrap_stock,
     },
     {
-        "key": "lot", "label": "🧾  Lot Rejection",
+        "key": "lot", "label": "  Lot Rejection",
         "title": "Lot Rejection Report",
         "subtitle": "Raw export → clean Lot Rejection Report in the standard "
                     "layout with a Grand Total of Wt.",
@@ -184,7 +173,7 @@ TOOLS = [
         "add": add_lot_rejection_sheet, "preview": _preview_lot,
     },
     {
-        "key": "groupsales", "label": "💍  Groupsales",
+        "key": "groupsales", "label": "  Groupsales",
         "title": "Groupsales Reports",
         "subtitle": "Raw export → pivot of Groupsales → Karat → Net Wt / Pg Wt "
                     "with per-group and grand totals.",
@@ -195,7 +184,7 @@ TOOLS = [
         "add": add_groupsales_sheet, "preview": _preview_groupsales,
     },
     {
-        "key": "filling_loss", "label": "🔥  Filling Loss & Recovery",
+        "key": "filling_loss", "label": "  Filling Loss & Recovery",
         "title": "Filling Loss & Recovery Report",
         "subtitle": "Raw GOLD-FILLING loss export → remark × karat pivot of "
                     "Issue / Return / Unutilized / Loss weights.",
@@ -210,7 +199,7 @@ TOOLS = [
         "add": add_filling_loss_sheet, "preview": _preview_filling_loss,
     },
     {
-        "key": "factory_inward", "label": "🏭  Factory Inward",
+        "key": "factory_inward", "label": "  Factory Inward",
         "title": "Factory Inward (GRN)",
         "subtitle": "Raw GRN export → pivot of Sr. No. / Party Name / Karat / "
                     "Net Wt / Pg Wt, ordered by the party position table.",
@@ -222,7 +211,7 @@ TOOLS = [
         "extra": _factory_extra,
     },
     {
-        "key": "factory_outward", "label": "🚚  Factory Outward",
+        "key": "factory_outward", "label": "  Factory Outward",
         "title": "Factory Outward",
         "subtitle": "Raw export → pivot of Sr. No. / Party Name / Karat / "
                     "Net Wt / Pg Wt, ordered by the party position table.",
@@ -235,8 +224,6 @@ TOOLS = [
     },
 ]
 
-# Bytes of every successfully-readable upload, keyed by tool — drives the
-# combined workbook in the sidebar.
 uploaded_bytes: dict[str, bytes] = {}
 
 
@@ -257,7 +244,7 @@ def render_tool_tab(spec: dict) -> None:
 
     data = file.getvalue()
     st.divider()
-    st.subheader(f"📄 {file.name}")
+    st.subheader(f" {file.name}")
     try:
         wb = new_workbook()
         result = spec["add"](wb, data)
@@ -283,12 +270,9 @@ for tab, spec in zip(st.tabs([t["label"] for t in TOOLS]), TOOLS):
         render_tool_tab(spec)
 
 
-# ===========================================================================
-# Sidebar — universal combined workbook (all uploaded tabs as sub-sheets)
-# ===========================================================================
 def render_combined_sidebar() -> None:
     with st.sidebar:
-        st.markdown("### 📚 Combined Workbook")
+        st.markdown("###  Combined Workbook")
         st.caption("One file with every uploaded tab's output as sub-sheets.")
 
         if not uploaded_bytes:

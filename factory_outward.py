@@ -1,12 +1,3 @@
-"""
-Factory Outward — pivot summary.
-
-Identical processing to Factory Inward (Karat from Variant Name, pivot by the
-party position table with serial Sr. No., per-party totals, Grand Total, and a
-karat-only summary block). Only the report title and sheet name differ; the
-transaction type is read from the file's preamble.
-"""
-
 from __future__ import annotations
 
 from factory_inward import (FactoryInwardResult, add_factory_inward_sheet,
