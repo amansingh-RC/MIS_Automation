@@ -16,6 +16,7 @@ from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
 from rcl_reports import add_scrap_stock_sheets
 from report_common import new_workbook, workbook_bytes
+from return_summary import add_return_summary_sheet
 
 st.set_page_config(
     page_title="RCL MIS Automation",
@@ -134,6 +135,66 @@ def _preview_filling_loss(result):
                  hide_index=True)
 
 
+def _preview_return_summary(result):
+    g = result.grand
+
+    def gv(k, i):
+        return g.get(k, [0.0, 0.0])[i]
+
+    msg = (f"{result.parties} parties  ·  {result.date_from} to "
+           f"{result.date_to}  ·  Receipt Metal Net: {gv('METAL', 0):,.3f}  ·  "
+           f"Issue Net: {gv('ISSUE', 0):,.3f}  ·  "
+           f"Return Net: {gv('RETURN', 0):,.3f}")
+    if result.unlisted:
+        msg += (f"  ·  {len(result.unlisted)} party(ies) not in the position "
+                "table (placed at end)")
+    st.success(msg)
+    st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
+                 hide_index=True)
+
+
+def render_return_summary(spec: dict) -> None:
+    """Custom tab renderer: this report needs TWO uploads (inward + outward)."""
+    ui.section_title(spec["title"], spec["subtitle"])
+    with st.expander("How it works"):
+        st.markdown(spec["help"])
+    _factory_extra(spec)                       # optional position-table override
+
+    col_in, col_out = st.columns(2)
+    with col_in:
+        f_in = st.file_uploader("Factory Inward (GRN)  ·  .xls / .xlsx",
+                                type=["xlsx", "xlsm", "xls"],
+                                key=spec["key"] + "_in")
+    with col_out:
+        f_out = st.file_uploader("Factory Outward (INV)  ·  .xls / .xlsx",
+                                 type=["xlsx", "xlsm", "xls"],
+                                 key=spec["key"] + "_out")
+    if f_in is None or f_out is None:
+        st.info("Upload BOTH the Factory Inward (GRN) and Factory Outward "
+                "(INV) exports to build this report.")
+        return
+
+    st.divider()
+    try:
+        wb = new_workbook()
+        result = add_return_summary_sheet(
+            wb, f_in.getvalue(), f_out.getvalue(),
+            _get_positions(spec["key"]))
+        out_bytes = workbook_bytes(wb)
+    except LossReportError as exc:
+        st.error(f"Could not process these files: {exc}")
+        return
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Unexpected error reading the files: {exc}")
+        return
+
+    spec["preview"](result)
+    out_name = f"{spec['title'].replace(' ', '_')}_{TODAY}.xlsx"
+    st.download_button(
+        f"⬇  Download {spec['title']}", data=out_bytes, file_name=out_name,
+        mime=XLSX_MIME, key=spec["key"] + "_dl")
+
+
 def _preview_groupsales(result):
     note = f"  ·  Date: {result.date}" if result.date else ""
     msg = (f"Grand Total — Net Wt: {result.grand_net:,.3f}  ·  "
@@ -200,7 +261,7 @@ TOOLS = [
         "add": add_filling_loss_sheet, "preview": _preview_filling_loss,
     },
     {
-        "key": "gold_buffing", "label": "✨  Gold Buffing",
+        "key": "gold_buffing", "label": "  Gold Buffing",
         "title": "Gold Buffing Loss & Recovery Report",
         "subtitle": "Raw GOLD-BUFFING loss export → remark × karat pivot of "
                     "Issue / Return / Unutilized / Loss weights.",
@@ -215,7 +276,7 @@ TOOLS = [
         "add": add_gold_buffing_sheet, "preview": _preview_filling_loss,
     },
     {
-        "key": "cast_gold_buffing", "label": "🪞  Cast Gold Buffing",
+        "key": "cast_gold_buffing", "label": "  Cast Gold Buffing",
         "title": "Cast Gold Buffing Loss & Recovery Report",
         "subtitle": "Raw CAST GOLD BUFFING loss export → remark × karat pivot "
                     "of Issue / Return / Unutilized / Loss weights.",
@@ -252,6 +313,21 @@ TOOLS = [
                 "karat-only summary block.",
         "add": _add_factory_outward, "preview": _preview_factory,
         "extra": _factory_extra,
+    },
+    {
+        "key": "return_summary", "label": "📊  Return % Summary",
+        "title": "Return % Summary Report",
+        "subtitle": "Factory Inward (GRN) + Factory Outward (INV) exports → "
+                    "per-party × karat pivot of Receipt Metal / Issue Metal / "
+                    "Issue / Return with Net Goods and Return %.",
+        "help": "Both files get the Factory Inward/Outward treatment (Karat "
+                "from the Variant Name, out-of-band = OT) without the pivot, "
+                "then are merged. **24KT → 24KT-METAL**. **Remark**: inward + "
+                "24KT = Metal (Receipt Metal), outward + 24KT = Issue Metal, "
+                "outward + other = Issue, inward + other = Return. Parties are "
+                "ordered by the position table. **Net Goods** = Issue − "
+                "Return; **Return %** = Return ÷ Issue (Net and Pg).",
+        "render": render_return_summary, "preview": _preview_return_summary,
     },
 ]
 
@@ -298,7 +374,7 @@ def render_tool_tab(spec: dict) -> None:
 
 for tab, spec in zip(st.tabs([t["label"] for t in TOOLS]), TOOLS):
     with tab:
-        render_tool_tab(spec)
+        spec.get("render", render_tool_tab)(spec)
 
 
 def render_combined_sidebar() -> None:
@@ -313,7 +389,7 @@ def render_combined_sidebar() -> None:
         wb = new_workbook()
         included, errors = [], []
         for spec in TOOLS:
-            if spec["key"] not in uploaded_bytes:
+            if not spec.get("add") or spec["key"] not in uploaded_bytes:
                 continue
             try:
                 spec["add"](wb, uploaded_bytes[spec["key"]])
