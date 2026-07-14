@@ -2,7 +2,9 @@ import io
 
 import openpyxl
 
-from rcl_reports import process_scrap_and_stock, _r3, process_scrap, process_stock
+from rcl_reports import (add_scrap_stock_manish_sheets, process_scrap,
+                         process_scrap_and_stock, process_stock, _r3)
+from report_common import new_workbook, workbook_bytes
 
 # A raw export with BOTH the columns the two tools need.
 HEADERS = ["Wcgroup Name", "Wc Name", "Party Name", "Item Group",
@@ -91,7 +93,42 @@ def main():
     assert summary["scrap_rows"] == 4
     assert summary["stock_filtered"] == 7
     print("OK  summary stats")
+
+    test_manish(data)
     print("\nALL TESTS PASSED")
+
+
+def test_manish(data):
+    """Manish variant: Scrap kept to {GRP-A}, Stock kept to {grp-a, GRP-C}
+    (case/punct-insensitive), image-style layout with green totals."""
+    wb = new_workbook()
+    add_scrap_stock_manish_sheets(
+        wb, data, "11-07-2026", "9:45",
+        scrap_wcg=["GRP-A"], stock_wcg=["grp-a", "GRP-C"])
+    out = openpyxl.load_workbook(io.BytesIO(workbook_bytes(wb)))
+    assert out.sheetnames == ["Scrap Report", "Stock Report"], out.sheetnames
+
+    scrap = out["Scrap Report"]
+    assert scrap["A1"].value == "Scrap Report _ Date : 11-07-2026 _ Time : 9:45"
+    assert [scrap.cell(row=2, column=c).value for c in range(1, 5)] == \
+        ["Wcgroup Name", "Wc Name", "Gross Weight", "Metal Weight"]
+    groups_seen = {scrap.cell(row=r, column=1).value
+                   for r in range(3, scrap.max_row + 1)}
+    # Only GRP-A kept (GRP-B filtered out).
+    assert "GRP-B Total" not in groups_seen, groups_seen
+    total = next(r for r in range(3, scrap.max_row + 1)
+                 if scrap.cell(row=r, column=1).value == "GRP-A Total")
+    assert _r3(scrap.cell(row=total, column=3).value) == 17.0   # 15 + 2
+    assert scrap.cell(row=total, column=1).fill.fgColor.rgb.endswith("A9D08E")
+    print("OK  manish scrap: filter + title + green total")
+
+    stock = out["Stock Report"]
+    kept = {stock.cell(row=r, column=1).value
+            for r in range(3, stock.max_row + 1)
+            if stock.cell(row=r, column=1).value
+            and "Total" in str(stock.cell(row=r, column=1).value)}
+    assert kept == {"GRP-A Total", "GRP-C Total"}, kept   # PARTY-X, GRP-B dropped
+    print("OK  manish stock: case-insensitive Wcgroup filter")
 
 
 if __name__ == "__main__":

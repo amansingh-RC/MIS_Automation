@@ -6,7 +6,7 @@ import re
 from collections import OrderedDict
 
 import openpyxl
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from loss_report import LossReportError, _looks_like_xls
 
@@ -325,3 +325,106 @@ def process_scrap_and_stock(file_bytes: bytes, today: str) -> tuple[bytes, dict]
     wb = new_workbook()
     summary = add_scrap_stock_sheets(wb, file_bytes, today)
     return workbook_bytes(wb), summary
+
+
+# ===========================================================================
+# "Manish Report" variant — Scrap / Stock limited to a chosen set of Wcgroup
+# names, in the compact "Stock Report _ Date _ Time" layout with green totals.
+# ===========================================================================
+_GREEN_FILL = PatternFill("solid", fgColor="FFA9D08E")
+_THIN = Side(style="thin", color="FF000000")
+_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+_CENTER = Alignment(horizontal="center", vertical="center")
+
+
+def _norm_wcg(value) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+
+def _apply_wcg_filter(result: dict, allowed) -> dict:
+    """Keep only the Wcgroup Names in ``allowed`` (case/space/punct-insensitive)
+    and recompute the totals from the kept groups."""
+    if not allowed:
+        return result
+    allow = {_norm_wcg(x) for x in allowed}
+    groups = OrderedDict((g, e) for g, e in result["groups"].items()
+                         if _norm_wcg(g) in allow)
+    out = dict(result)
+    out["groups"] = groups
+    out["total_gross"] = sum(e["gross"] for es in groups.values() for e in es)
+    out["total_metal"] = sum(e["metal"] for es in groups.values() for e in es)
+    if "group_count" in out:
+        out["group_count"] = len(groups)
+    if "row_count" in out:
+        out["row_count"] = sum(len(es) for es in groups.values())
+    return out
+
+
+def _write_manish_block(ws, groups, title: str) -> None:
+    """Title + gray header + group rows with green '{group} Total' rows."""
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
+    t = ws.cell(row=1, column=1, value=title)
+    t.font = Font(bold=True, size=14)
+    t.alignment = _CENTER
+    for c, label in enumerate(("Wcgroup Name", "Wc Name", "Gross Weight",
+                               "Metal Weight"), start=1):
+        h = ws.cell(row=2, column=c, value=label)
+        h.font = _HEAD_FONT
+        h.fill = _HEAD_FILL
+        h.alignment = _CENTER
+
+    r = 3
+    for grp, entries in groups.items():
+        g_gross = g_metal = 0.0
+        for i, e in enumerate(entries):
+            g_gross += e["gross"]
+            g_metal += e["metal"]
+            ws.cell(row=r, column=1, value=grp if i == 0 else "")
+            ws.cell(row=r, column=2, value=e["wcname"])
+            ws.cell(row=r, column=3, value=_r3(e["gross"]))
+            ws.cell(row=r, column=4, value=_r3(e["metal"]))
+            r += 1
+        ws.cell(row=r, column=1, value=f"{grp} Total")
+        ws.cell(row=r, column=2, value="")
+        ws.cell(row=r, column=3, value=_r3(g_gross))
+        ws.cell(row=r, column=4, value=_r3(g_metal))
+        for c in (1, 2, 3, 4):
+            cell = ws.cell(row=r, column=c)
+            cell.font = _TOTAL_FONT
+            cell.fill = _GREEN_FILL
+        r += 1
+
+    for rr in range(2, r):
+        for c in range(1, 5):
+            cell = ws.cell(row=rr, column=c)
+            cell.border = _BORDER
+            if c in (3, 4) and isinstance(cell.value, (int, float)):
+                cell.number_format = _NUM_FMT
+                cell.alignment = _RIGHT
+    for col, w in zip("ABCD", (34, 34, 18, 18)):
+        ws.column_dimensions[col].width = w
+
+
+def add_scrap_stock_manish_sheets(wb: openpyxl.Workbook, file_bytes: bytes,
+                                  title_date: str, title_time: str,
+                                  scrap_wcg=None, stock_wcg=None) -> dict:
+    """Append filtered 'Scrap Report' and 'Stock Report' sheets (Manish layout)."""
+    grid = _grid_first_sheet(file_bytes)
+    scrap = _apply_wcg_filter(process_scrap(grid), scrap_wcg)
+    stock = _apply_wcg_filter(process_stock(grid), stock_wcg)
+
+    ws = wb.create_sheet("Scrap Report")
+    _write_manish_block(
+        ws, scrap["groups"],
+        f"Scrap Report _ Date : {title_date} _ Time : {title_time}")
+    ws2 = wb.create_sheet("Stock Report")
+    _write_manish_block(
+        ws2, stock["groups"],
+        f"Stock Report _ Date : {title_date} _ Time : {title_time}")
+
+    return {
+        "scrap_groups": len(scrap["groups"]),
+        "scrap_gross": scrap["total_gross"],
+        "stock_groups": len(stock["groups"]),
+        "stock_gross": stock["total_gross"],
+    }

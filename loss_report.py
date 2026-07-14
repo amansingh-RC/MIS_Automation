@@ -166,8 +166,13 @@ def _center(wrap=True):
     return Alignment(horizontal="center", vertical="center", wrap_text=wrap)
 
 
-def add_loss_sheet(wb: openpyxl.Workbook, file_bytes: bytes) -> ParsedReport:
-    """Append the formatted 'Loss Report Summary' sheet to ``wb``."""
+def add_loss_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
+                   wc_filter=None) -> ParsedReport:
+    """Append the formatted 'Loss Report Summary' sheet to ``wb``.
+
+    ``wc_filter`` (optional): an iterable of Wc Name values; when given, only
+    those work centres are kept (matched case/spacing/punctuation-insensitively).
+    """
     grid = _grid_from_bytes(file_bytes)
     header_row, col_map = _find_header(grid)
     if header_row is None:
@@ -175,6 +180,7 @@ def add_loss_sheet(wb: openpyxl.Workbook, file_bytes: bytes) -> ParsedReport:
             "Could not find a header row containing 'Wc Name'. "
             "Please make sure you uploaded the correct Loss Report sheet."
         )
+    allow = None if wc_filter is None else {_norm(x) for x in wc_filter}
     missing = [m for m in ("loss", "gain", "process") if m not in col_map]
     if missing:
         pretty = {"loss": "Loss Quantity Pg", "gain": "Gain Pg",
@@ -239,6 +245,8 @@ def add_loss_sheet(wb: openpyxl.Workbook, file_bytes: bytes) -> ParsedReport:
 
         if not name or all(v is None for v in nums.values()):
             continue
+        if allow is not None and _norm(name) not in allow:
+            continue
 
         # Column A: work-center name
         a = ws.cell(row=out_row, column=1, value=name)
@@ -291,6 +299,10 @@ def add_loss_sheet(wb: openpyxl.Workbook, file_bytes: bytes) -> ParsedReport:
         out_row += 1
 
     if not preview:
+        if allow is not None:
+            raise LossReportError(
+                "None of the report's work centres matched the requested "
+                "Wc Name list.")
         raise LossReportError("Found the header but no data rows to process.")
 
     for col, width in _COL_WIDTHS.items():

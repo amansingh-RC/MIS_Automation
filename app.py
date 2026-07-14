@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -12,9 +12,11 @@ from factory_outward import add_factory_outward_sheet
 from filling_loss import (add_cast_gold_buffing_sheet, add_filling_loss_sheet,
                           add_gold_buffing_sheet)
 from groupsales import add_groupsales_sheet
+from inter_wc_transfer import add_inter_wc_transfer_sheet
 from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
-from rcl_reports import add_scrap_stock_sheets
+from rcl_reports import (add_scrap_stock_manish_sheets,
+                         add_scrap_stock_sheets)
 from report_common import new_workbook, workbook_bytes
 from return_summary import add_return_summary_sheet
 
@@ -29,6 +31,45 @@ XLSX_MIME = ("application/vnd.openxmlformats-officedocument"
              ".spreadsheetml.sheet")
 TODAY = date.today().isoformat()
 TODAY_DMY = date.today().strftime("%d-%m-%Y")
+
+
+MANISH_LOSS_WC = [
+    "CAST GOLD BUFFING WK", "CAST RHODIUM PLATING-WK", "CAST-MELTING-WK",
+    "ENAMEL WK", "GOLD METAL SETTING WK", "GOLD-ASSEMBLY-WK",
+    "GOLD-BUFFING-WK", "GOLD-CASTING-WK", "GOLD-EP-WK", "GOLD-FILLING-WK",
+    "GOLD-REPAIR-ASSEMBLY-WK", "GOLD-REPAIR-WK", "GOLD-SHORT-WK",
+    "GOLD-TREE-CUTTING-WK", "MEDIA-POLISH-WK", "REFINING-WK",
+    "REPAIR CAST GOLD BUFFING WK", "REPAIR-GOLD-BUFFING-WK",
+    "RHODIUM-PLATING-WK", "ROLLING-WK",
+]
+
+
+def _add_loss_manish(wb, file_bytes):
+    return add_loss_sheet(wb, file_bytes, wc_filter=MANISH_LOSS_WC)
+
+
+# Manish Report: Wcgroup Names to keep in the Scrap / Stock sheets.
+MANISH_SCRAP_WCG = [
+    "CAST GOLD BUFFING HOD", "CENTRAL-OFFICE-1F", "ELECTROPLATING",
+    "GOLD-BUFFING-HOD", "GOLD-CASTING", "GOLD-FILLING", "GOLD-REPAIR-HOD",
+    "GOLD-SHORT-HOD", "HAMMERING", "HAND-CUTTING", "MEDIA-POLISH",
+]
+MANISH_STOCK_WCG = [
+    "CAD", "CAM", "CAST GOLD BUFFING HOD", "CAST-MAGNATIC-HOD",
+    "CENTRAL-OFFICE-1F", "ELECTROPLATING", "ENAMEL HOD", "GOLD METALSETTING",
+    "GOLD-ASSEMBLY", "GOLD-BUFFING-HOD", "GOLD-CASTING", "GOLD-FILLING",
+    "GOLD-REPAIR-HOD", "GOLD-SEPERATION", "GOLD-SHORT-HOD", "HALLMARK",
+    "HAMMERING", "HAND-CUTTING", "MEDIA-POLISH", "PACKING & QA",
+    "PHOTOGRAPHY HOD", "REFINING-HOD", "WAX",
+]
+
+
+def _add_scrap_stock_manish(wb, file_bytes):
+    now = datetime.now()
+    return add_scrap_stock_manish_sheets(
+        wb, file_bytes, TODAY_DMY, f"{now.hour}:{now.minute:02d}",
+        MANISH_SCRAP_WCG, MANISH_STOCK_WCG)
+
 
 def _add_scrap_stock(wb, file_bytes):
     return add_scrap_stock_sheets(wb, file_bytes, TODAY)
@@ -153,6 +194,15 @@ def _preview_return_summary(result):
                  hide_index=True)
 
 
+def _preview_inter_wc(result):
+    note = f"  ·  DATE : {result.date}" if result.date else ""
+    st.success(f"{result.source_count} source workers  ·  {result.kept_rows} "
+               f"rows kept  ·  Grand Total — Weight: {result.grand_weight:,.3f}"
+               f"  ·  Pg Metal: {result.grand_pg:,.3f}{note}")
+    st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
+                 hide_index=True)
+
+
 def render_return_summary(spec: dict) -> None:
     """Custom tab renderer: this report needs TWO uploads (inward + outward)."""
     ui.section_title(spec["title"], spec["subtitle"])
@@ -214,6 +264,7 @@ TOOLS = [
                 "**Loss %** = Final Loss ÷ (Process + Unutilized + Scrap + "
                 "Sample).",
         "add": add_loss_sheet, "preview": _preview_loss,
+        "manish": _add_loss_manish,
     },
     {
         "key": "scrap_stock", "label": "  Scrap + Stock",
@@ -224,6 +275,7 @@ TOOLS = [
                 "**Stock**: removes ALLOY/Beads/stones/Pearl, keeps OM under "
                 "OTHER METAL, merges duplicates.",
         "add": _add_scrap_stock, "preview": _preview_scrap_stock,
+        "manish": _add_scrap_stock_manish,
     },
     {
         "key": "lot", "label": "  Lot Rejection",
@@ -233,6 +285,7 @@ TOOLS = [
         "help": "Rebuilds the report with the title, date band, merged "
                 "Operation / Wc / User columns, and a recomputed Wt total.",
         "add": add_lot_rejection_sheet, "preview": _preview_lot,
+        "manish": add_lot_rejection_sheet,      # included as-is in Manish Report
     },
     {
         "key": "groupsales", "label": "  Groupsales",
@@ -315,7 +368,7 @@ TOOLS = [
         "extra": _factory_extra,
     },
     {
-        "key": "return_summary", "label": "📊  Return % Summary",
+        "key": "return_summary", "label": "Return % Summary",
         "title": "Return % Summary Report",
         "subtitle": "Factory Inward (GRN) + Factory Outward (INV) exports → "
                     "per-party × karat pivot of Receipt Metal / Issue Metal / "
@@ -328,6 +381,20 @@ TOOLS = [
                 "ordered by the position table. **Net Goods** = Issue − "
                 "Return; **Return %** = Return ÷ Issue (Net and Pg).",
         "render": render_return_summary, "preview": _preview_return_summary,
+    },
+    {
+        "key": "inter_wc", "label": " Inter WC Transfer",
+        "title": "Inter WC Group Transfer Outward",
+        "subtitle": "Raw Inter WC Group Transfer Outward export → Source Worker "
+                    "→ Dest Worker pivot of Weight and Pg Metal Weight.",
+        "help": "Keeps only the configured Source Workers (CAM, CAST GOLD "
+                "BUFFING HOD, … WAX), then pivots by Source Worker → Dest "
+                "Worker, summing **Weight** and **Pg Metal Weight**, with a "
+                "per-source total and a Grand Total. Rows are in alphabetical "
+                "(pivot) order.",
+        "add": add_inter_wc_transfer_sheet, "preview": _preview_inter_wc,
+        "manish": add_inter_wc_transfer_sheet,   # goes into Manish, not Combined
+        "skip_combined": True,
     },
 ]
 
@@ -348,7 +415,7 @@ def render_tool_tab(spec: dict) -> None:
     if file is None:
         st.info("Upload a file to process this report.")
         return
-
+                        
     data = file.getvalue()
     st.divider()
     st.subheader(f" {file.name}")
@@ -389,7 +456,8 @@ def render_combined_sidebar() -> None:
         wb = new_workbook()
         included, errors = [], []
         for spec in TOOLS:
-            if not spec.get("add") or spec["key"] not in uploaded_bytes:
+            if (not spec.get("add") or spec.get("skip_combined")
+                    or spec["key"] not in uploaded_bytes):
                 continue
             try:
                 spec["add"](wb, uploaded_bytes[spec["key"]])
@@ -408,5 +476,42 @@ def render_combined_sidebar() -> None:
             st.warning(msg)
 
 
+def render_manish_sidebar() -> None:
+    """Second combined workbook: each configured tab contributes a customized
+    (column/row-limited) version of its report."""
+    with st.sidebar:
+        st.divider()
+        st.markdown("###  Manish Report")
+        st.caption("A combined workbook with a customized version of each "
+                   "report (e.g. Loss Report limited to specific work centres).")
+
+        specs = [s for s in TOOLS
+                 if s.get("manish") and s["key"] in uploaded_bytes]
+        if not specs:
+            st.info("Upload a file in a configured tab (Loss Report) to "
+                    "enable this.")
+            return
+
+        wb = new_workbook()
+        included, errors = [], []
+        for spec in specs:
+            try:
+                spec["manish"](wb, uploaded_bytes[spec["key"]])
+                included.append(spec["title"])
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{spec['title']}: {exc}")
+
+        if included:
+            st.success("Included: " + ", ".join(included))
+            st.download_button(
+                "⬇  Download Manish Report",
+                data=workbook_bytes(wb),
+                file_name=f"Manish_Report_{TODAY}.xlsx",
+                mime=XLSX_MIME, key="manish_dl")
+        for msg in errors:
+            st.warning(msg)
+
+
 render_combined_sidebar()
+render_manish_sidebar()
 ui.render_footer()
