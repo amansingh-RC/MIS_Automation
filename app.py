@@ -13,6 +13,9 @@ from filling_loss import (add_cast_gold_buffing_sheet, add_filling_loss_sheet,
                           add_gold_buffing_sheet)
 from groupsales import add_groupsales_sheet
 from inter_wc_transfer import add_inter_wc_transfer_sheet
+import html as _html
+
+import mailer
 from loss_report import LossReportError, add_loss_sheet
 from lot_rejection import add_lot_rejection_sheet
 from rcl_reports import (add_scrap_stock_manish_sheets,
@@ -31,6 +34,11 @@ XLSX_MIME = ("application/vnd.openxmlformats-officedocument"
              ".spreadsheetml.sheet")
 TODAY = date.today().isoformat()
 TODAY_DMY = date.today().strftime("%d-%m-%Y")
+
+# Default email subject / body shown (and editable) in both mail sections.
+DEFAULT_MAIL_SUBJECT = "MIS | Daily Report"
+DEFAULT_MAIL_MESSAGE = ("Hey Sir,\nPls find the MIS daily report.\n\n"
+                        "Thanks & Regards")
 
 
 MANISH_LOSS_WC = [
@@ -444,6 +452,74 @@ for tab, spec in zip(st.tabs([t["label"] for t in TOOLS]), TOOLS):
         spec.get("render", render_tool_tab)(spec)
 
 
+def _smtp_config() -> "mailer.SmtpConfig":
+    try:
+        smtp = dict(st.secrets.get("smtp", {}))
+    except Exception:  # noqa: BLE001 (no secrets.toml present)
+        smtp = {}
+    return mailer.SmtpConfig.from_dict(smtp)
+
+
+def _mail_default(key: str) -> str:
+    try:
+        return str(st.secrets.get("mail", {}).get(key, "") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _email_section(key: str, default_subject: str, default_message: str,
+                   attach_name: str, attach_bytes: bytes,
+                   default_to: str) -> None:
+    """Multi-recipient email with an editable Subject and Message and the
+    workbook attached. The body is exactly the message (plain, clean)."""
+    cfg = _smtp_config()
+    with st.expander("Email this report"):
+        if not cfg.configured:
+            st.caption("Email not configured. Copy "
+                       "`.streamlit/secrets.toml.example` to "
+                       "`.streamlit/secrets.toml` and add your Gmail SMTP "
+                       "settings + App Password.")
+        to = st.text_area(
+            "Send to  ·  add multiple (one per line or comma-separated)",
+            value=st.session_state.get(key + "_to", default_to),
+            key=key + "_to", height=90,
+            placeholder="name@royalchains.com\nanother@royalchains.com")
+        subject = st.text_input(
+            "Subject", value=st.session_state.get(key + "_subj",
+                                                  default_subject),
+            key=key + "_subj")
+        message = st.text_area(
+            "Message  ·  your custom email text",
+            value=st.session_state.get(key + "_msg", default_message),
+            key=key + "_msg", height=140)
+
+        recipients = mailer.parse_addrs(to)
+        invalid = [a for a in recipients if not mailer.valid_addr(a)]
+        if recipients:
+            note = f"{len(recipients)} recipient(s): " + ", ".join(recipients)
+            if invalid:
+                st.warning(f"{note}\n\n⚠ Invalid: {', '.join(invalid)}")
+            else:
+                st.caption(note)
+        if st.button("Send Email", key=key + "_send",
+                     use_container_width=True, disabled=not cfg.configured):
+            try:
+                sent = mailer.send_email(
+                    cfg, to, subject or default_subject, _email_html(message),
+                    attachments=[(attach_name, attach_bytes)])
+                st.success(f"Email successfully sent to {len(sent)} "
+                           f"recipient(s): " + ", ".join(sent))
+            except mailer.MailError as exc:
+                st.error(str(exc))
+
+
+def _email_html(message: str) -> str:
+    """Render the plain-text message as a clean, simple email body."""
+    safe_msg = _html.escape(message or "").replace("\n", "<br>")
+    return (f'<div style="font-family:Arial,Helvetica,sans-serif;'
+            f'font-size:14px;color:#202124;line-height:1.5">{safe_msg}</div>')
+
+
 def render_combined_sidebar() -> None:
     with st.sidebar:
         st.markdown("###  Combined Workbook")
@@ -466,12 +542,17 @@ def render_combined_sidebar() -> None:
                 errors.append(f"{spec['title']}: {exc}")
 
         if included:
+            data = workbook_bytes(wb)
+            fname = f"RCL_MIS_Combined_{TODAY}.xlsx"
             st.success("Included: " + ", ".join(included))
             st.download_button(
-                "⬇  Download Combined Workbook",
-                data=workbook_bytes(wb),
-                file_name=f"RCL_MIS_Combined_{TODAY}.xlsx",
-                mime=XLSX_MIME, key="combined_dl")
+                "⬇  Download Combined Workbook", data=data,
+                file_name=fname, mime=XLSX_MIME, key="combined_dl")
+            _email_section(
+                "combined", default_subject=DEFAULT_MAIL_SUBJECT,
+                default_message=DEFAULT_MAIL_MESSAGE,
+                attach_name=fname, attach_bytes=data,
+                default_to=_mail_default("combined_to"))
         for msg in errors:
             st.warning(msg)
 
@@ -502,12 +583,17 @@ def render_manish_sidebar() -> None:
                 errors.append(f"{spec['title']}: {exc}")
 
         if included:
+            data = workbook_bytes(wb)
+            fname = f"Manish_Report_{TODAY}.xlsx"
             st.success("Included: " + ", ".join(included))
             st.download_button(
-                "⬇  Download Manish Report",
-                data=workbook_bytes(wb),
-                file_name=f"Manish_Report_{TODAY}.xlsx",
-                mime=XLSX_MIME, key="manish_dl")
+                "⬇  Download Manish Report", data=data,
+                file_name=fname, mime=XLSX_MIME, key="manish_dl")
+            _email_section(
+                "manish", default_subject=DEFAULT_MAIL_SUBJECT,
+                default_message=DEFAULT_MAIL_MESSAGE,
+                attach_name=fname, attach_bytes=data,
+                default_to=_mail_default("manish_to"))
         for msg in errors:
             st.warning(msg)
 
