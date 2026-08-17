@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import openpyxl
@@ -12,6 +12,7 @@ from openpyxl.utils import get_column_letter
 
 from groupsales import karat_from_variant
 from loss_report import LossReportError, _grid_from_bytes, to_number
+from report_common import add_top_block, rank_top
 
 _POSITIONS_PATH = Path(__file__).parent / "assets" / "party_positions.xlsx"
 # "OT" (Other) captures any karat value outside the four standard bands.
@@ -27,6 +28,7 @@ class FactoryInwardResult:
     date_to: str
     unlisted: list[str]        # parties not found in the position table
     skipped: int               # rows whose variant matched no karat band
+    top_rows: list[dict] = field(default_factory=list)   # the TOP 5 block rows
 
 
 def load_positions(file_bytes: bytes) -> "OrderedDict[str, int]":
@@ -75,6 +77,9 @@ _FONT = "Cambria"
 _CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _COL_WIDTHS = {1: 8, 2: 47, 3: 12, 4: 14, 5: 16}
 _LAST_COL = 5
+# TOP 5 block: right-hand side, column G onwards (F stays a spacer).
+_TOP_COL = _LAST_COL + 2
+_TOP_WIDTHS = (40, 16, 16)
 
 
 def _find_header(grid: list[list]):
@@ -189,6 +194,7 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
     preview: list[dict] = []
     grand_net = grand_pg = 0.0
     karat_totals: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    party_totals: "OrderedDict[str, list[float]]" = OrderedDict()
     out = 4
     for sr_no, party in ordered:
         karats = [k for k in _KARAT_ORDER if k in agg[party]]
@@ -218,6 +224,7 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
         preview.append({"Sr. No.": "", "Party Name": f"{party} Total",
                         "Karat": "", "Net Wt": round(p_net, 3),
                         "Pg Wt": round(p_pg, 3)})
+        party_totals[party] = [p_net, p_pg]
         grand_net += p_net
         grand_pg += p_pg
         out += 1
@@ -274,9 +281,16 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
         ws.column_dimensions[get_column_letter(col)].width = width
     ws.freeze_panes = ws.cell(row=4, column=1)
 
+    # --- TOP 5 block on the right (rework / hallmarking parties excluded) ---
+    top_rows = add_top_block(
+        ws, _TOP_COL, "Party Name",
+        rank_top(party_totals, exclude=True), karat_totals, _KARAT_ORDER,
+        grand_net, grand_pg, widths=_TOP_WIDTHS)
+
     return FactoryInwardResult(
         rows=preview, grand_net=round(grand_net, 3), grand_pg=round(grand_pg, 3),
-        date_from=date_from, date_to=date_to, unlisted=unlisted, skipped=skipped)
+        date_from=date_from, date_to=date_to, unlisted=unlisted,
+        skipped=skipped, top_rows=top_rows)
 
 
 def process(file_bytes: bytes, positions=None,

@@ -143,6 +143,12 @@ def _preview_factory(result):
     if result.skipped:
         msg += f"  ·  {result.skipped} row(s) skipped (variant matched no karat)"
     st.success(msg)
+    if result.top_rows:
+        st.caption("TOP 5 parties (by Pg Wt, excluding reparing / refinishing "
+                   "/ hallmarking accounts) — also placed on the right-hand "
+                   "side of the sheet")
+        st.dataframe(pd.DataFrame(result.top_rows), use_container_width=True,
+                     hide_index=True)
     st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
                  hide_index=True)
 
@@ -257,9 +263,16 @@ def _preview_groupsales(result):
     note = f"  ·  Date: {result.date}" if result.date else ""
     msg = (f"Grand Total — Net Wt: {result.grand_net:,.3f}  ·  "
            f"Pg Wt: {result.grand_pg:,.3f}{note}")
+    if result.other:
+        msg += f"  ·  {result.other} row(s) out of band (shown as OT)"
     if result.skipped:
-        msg += f"  ·  {result.skipped} row(s) skipped (melting matched no karat)"
+        msg += f"  ·  {result.skipped} row(s) skipped (no karat value)"
     st.success(msg)
+    if result.top_rows:
+        st.caption(f"TOP 5 {result.top_label} (by Pg Wt) — also placed on the "
+                   "right-hand side of the sheet")
+        st.dataframe(pd.DataFrame(result.top_rows), use_container_width=True,
+                     hide_index=True)
     st.dataframe(pd.DataFrame(result.rows), use_container_width=True,
                  hide_index=True)
 
@@ -302,8 +315,11 @@ TOOLS = [
                     "with per-group and grand totals.",
         "help": "Karat is derived from Metal Fineness × 100 (fallback: Variant "
                 "Name): 24KT 99–100, 22KT 91–92.5, 18KT 74.5–76, 14KT "
-                "57.5–59.8. Rows with a blank Groupsales are grouped under "
-                "\"(blank)\".",
+                "57.5–59.8. A karat / melting value outside these bands is "
+                "kept as **OT** (Other) instead of being dropped. Rows with a "
+                "blank Groupsales are grouped under \"(blank)\". A **TOP 5** "
+                "block (parties ranked by Pg Wt, plus a karat summary) sits on "
+                "the right-hand side of the sheet.",
         "add": add_groupsales_sheet, "preview": _preview_groupsales,
     },
     {
@@ -359,7 +375,9 @@ TOOLS = [
         "help": "Karat comes from the Variant Name (decimal melting %, else a "
                 "literal NNKT). Parties are ordered by the position table and "
                 "numbered serially (1, 2, 3…); parties not in the table go to "
-                "the end. Includes a karat-only summary block.",
+                "the end. Includes a karat-only summary block, plus a **TOP 5** "
+                "block on the right (parties by Pg Wt; *reparing*, "
+                "*refinishing* and hallmarking accounts are not ranked).",
         "add": _add_factory_inward, "preview": _preview_factory,
         "extra": _factory_extra,
     },
@@ -370,8 +388,8 @@ TOOLS = [
                     "Net Wt / Pg Wt, ordered by the party position table.",
         "help": "Same processing as Factory Inward: Karat from the Variant "
                 "Name, parties ordered by the position table and numbered "
-                "serially, with per-party totals, a Grand Total, and a "
-                "karat-only summary block.",
+                "serially, with per-party totals, a Grand Total, a karat-only "
+                "summary block, and the same right-hand **TOP 5** block.",
         "add": _add_factory_outward, "preview": _preview_factory,
         "extra": _factory_extra,
     },

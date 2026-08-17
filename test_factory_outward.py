@@ -23,6 +23,8 @@ def make_input(trans_type: str) -> bytes:
         ("RC-REFINISHING", "G-NA-75.00-RG", 10.0, 7.0),
         ("RC-REFINISHING", "G-NA-80.00-YG", 5.0, 3.0),   # out of band -> OT
         ("UNKNOWN PARTY", "G-NA-91.80-YG", 5.0, 4.0),
+        # excluded from the TOP 5 despite outweighing everything else
+        ("REPARING-ARK CHAINS", "G-NA-91.80-YG", 200.0, 190.0),
     ]
     r = 13
     for party, var, net, pg in data:
@@ -55,13 +57,26 @@ def main():
              for r in range(4, ws.max_row + 1)}
     assert srnos.get("Royal Chain Private Limited") == 1, srnos
     assert srnos.get("RC-REFINISHING") == 2, srnos
-    assert srnos.get("UNKNOWN PARTY") == 3, srnos
-    assert abs(result.grand_net - 120.0) < 1e-9, result.grand_net   # 100+10+5+5
+    assert srnos.get("REPARING-ARK CHAINS") == 3, srnos
+    assert srnos.get("UNKNOWN PARTY") == 4, srnos
+    # 100+10+5+5+200
+    assert abs(result.grand_net - 320.0) < 1e-9, result.grand_net
     # out-of-band karat kept as "OT" (same as Factory Inward)
     karats = {ws.cell(row=r, column=3).value for r in range(4, ws.max_row + 1)}
     assert "OT" in karats, karats
     assert result.skipped == 0, result.skipped
     print("OK  outward: title, serial Sr.No, totals, OT for out-of-band")
+
+    # TOP 5 block comes along too, with the same exclusions: only Royal Chain
+    # and UNKNOWN PARTY are left once reparing + refinishing are dropped
+    assert ws["G1"].value == "TOP 5"
+    top = [ws.cell(row=r, column=7).value for r in range(4, 6)]
+    assert top == ["Royal Chain Private Limited", "UNKNOWN PARTY"], top
+    assert ws["G6"].value == "Grand Total", ws["G6"].value
+    names = [r["Party Name"] for r in result.top_rows]
+    assert "REPARING-ARK CHAINS" not in names, names
+    assert "RC-REFINISHING" not in names, names
+    print("OK  outward: TOP 5 block, reparing + refinishing parties excluded")
 
     # Falls back to the default trans type when the preamble lacks it.
     out2, _ = process(make_input(""), positions=positions, gen_date="26-06-2026")

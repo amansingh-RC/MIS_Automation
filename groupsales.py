@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.styles.colors import Color
+from openpyxl.utils import get_column_letter
 
 from loss_report import LossReportError, _grid_from_bytes, to_number
+from report_common import add_top_block, rank_top
 
 # Display order of karats within a group (ascending, matches the target report).
-_KARAT_ORDER = ["14KT", "18KT", "22KT", "24KT"]
+# "OT" (Other) trails the standard bands and captures any karat / melting value
+# that falls outside them — same convention as Factory Inward/Outward.
+_OTHER = "OT"
+_KARAT_ORDER = ["14KT", "18KT", "22KT", "24KT", _OTHER]
 _BANDS = {"24KT", "22KT", "18KT", "14KT"}
 
 
@@ -52,7 +57,10 @@ class GroupsalesResult:
     grand_net: float
     grand_pg: float
     date: str
-    skipped: int              # rows whose melting matched no karat band
+    skipped: int              # rows with no karat / melting value at all
+    other: int = 0            # rows whose value fell outside the bands -> "OT"
+    top_label: str = "Party Name"          # what the TOP 5 block ranks
+    top_rows: list[dict] = field(default_factory=list)   # the TOP 5 block rows
 
 
 # --- styling (matches the target file) -------------------------------------
@@ -64,6 +72,10 @@ _NUM_FMT = "0.000"
 _FONT = "Cambria"
 _CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _COL_WIDTHS = {1: 41.6, 2: 16.7, 3: 15.8, 4: 15.4}
+
+# TOP 5 block: right-hand side, column F onwards (E stays a spacer).
+_TOP_COL = 6
+_TOP_WIDTHS = (34, 15, 15)
 
 
 def _find_header(grid: list[list]):
@@ -96,28 +108,38 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
     gi, vi = labels["Groupsales"], labels["Variant Name"]
     ni, pi = labels["Net Wt"], labels["Pg Wt"]
     fi = labels.get("Metal Fineness")          # optional, last-resort only
+    ai = labels.get("Party Name")              # optional, for the TOP 5 block
 
     def cell(row, i):
         return row[i] if (i is not None and i < len(row)) else None
 
     agg: "OrderedDict[str, dict]" = OrderedDict()
-    skipped = 0
+    # Ranked separately for the TOP 5 block: {name: [net, pg]}.
+    top_agg: "OrderedDict[str, list[float]]" = OrderedDict()
+    skipped = other = 0
     for r in range(header_row + 1, len(grid)):
         row = grid[r]
         group = "" if cell(row, gi) is None else str(cell(row, gi)).strip()
         if group.lower().startswith("grand"):
             continue
 
-        karat = karat_from_variant(cell(row, vi))
+        variant = cell(row, vi)
+        karat = karat_from_variant(variant)
+        fineness = to_number(cell(row, fi))
+        has_fineness = fineness is not None and fineness > 0
+        if karat is None and has_fineness:
+            melting = fineness * 100 if fineness <= 2 else fineness
+            karat = karat_from_melting(melting)
         if karat is None:
-            fineness = to_number(cell(row, fi))
-            if fineness is not None:
-                melting = fineness * 100 if fineness <= 2 else fineness
-                karat = karat_from_melting(melting)
-        if karat is None:
-            # No usable karat -> not a real data row (empty/spacer rows too).
-            skipped += 1
-            continue
+            # A karat / melting value outside the bands is kept as "OT" so it
+            # still reaches the final report; only rows with no value at all
+            # (empty/spacer rows) are skipped.
+            if karat_from_variant(variant, other=_OTHER) is None \
+                    and not has_fineness:
+                skipped += 1
+                continue
+            karat = _OTHER
+            other += 1
         # Rows with a blank Groupsales are still counted, under "(blank)".
         key = group if group else "(blank)"
         net = to_number(cell(row, ni)) or 0.0
@@ -126,9 +148,19 @@ def _aggregate(grid: list[list], labels: dict, header_row: int):
         bucket = agg[key].setdefault(karat, [0.0, 0.0])
         bucket[0] += net
         bucket[1] += pg
+        # TOP 5 ranks parties when the export carries a Party Name column,
+        # otherwise it falls back to the Groupsales groups themselves.
+        name = "" if ai is None else str(cell(row, ai) or "").strip()
+        if ai is None:
+            name = key
+        if name:
+            tb = top_agg.setdefault(name, [0.0, 0.0])
+            tb[0] += net
+            tb[1] += pg
     if not agg:
         raise LossReportError("Groupsales report: no usable data rows found.")
-    return agg, skipped
+    top_label = "Groupsales" if ai is None else "Party Name"
+    return agg, top_agg, top_label, skipped, other
 
 
 def add_groupsales_sheet(wb: openpyxl.Workbook,
@@ -141,7 +173,8 @@ def add_groupsales_sheet(wb: openpyxl.Workbook,
             "Could not find a header row containing 'Groupsales'. "
             "Please make sure you uploaded the Groupsales export."
         )
-    agg, skipped = _aggregate(grid, labels, header_row)
+    agg, top_agg, top_label, skipped, other = _aggregate(
+        grid, labels, header_row)
     date = _extract_date(grid)
 
     ws = wb.create_sheet("Groupsales Reports")
@@ -167,6 +200,7 @@ def add_groupsales_sheet(wb: openpyxl.Workbook,
     # --- Data (groups in data/first-appearance order, ascending karat) ------
     preview: list[dict] = []
     grand_net = grand_pg = 0.0
+    karat_totals: dict[str, list[float]] = {}
     out = 4
     for group in agg:
         karats = [k for k in _KARAT_ORDER if k in agg[group]]
@@ -175,6 +209,9 @@ def add_groupsales_sheet(wb: openpyxl.Workbook,
             net, pg = agg[group][karat]
             g_net += net
             g_pg += pg
+            kt = karat_totals.setdefault(karat, [0.0, 0.0])
+            kt[0] += net
+            kt[1] += pg
             ws.cell(row=out, column=1,
                     value=group if i == 0 else None).font = (
                         Font(name=_FONT, bold=True, size=9))
@@ -220,12 +257,18 @@ def add_groupsales_sheet(wb: openpyxl.Workbook,
             if c in (3, 4) and r >= 4:
                 cell.number_format = _NUM_FMT
     for col, width in _COL_WIDTHS.items():
-        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
+        ws.column_dimensions[get_column_letter(col)].width = width
     ws.freeze_panes = ws.cell(row=4, column=1)
+
+    # --- TOP 5 block on the right (written last: it owns columns F:H) -------
+    top_rows = add_top_block(ws, _TOP_COL, top_label,
+                             rank_top(top_agg), karat_totals, _KARAT_ORDER,
+                             grand_net, grand_pg, widths=_TOP_WIDTHS)
 
     return GroupsalesResult(rows=preview, grand_net=round(grand_net, 3),
                             grand_pg=round(grand_pg, 3), date=date,
-                            skipped=skipped)
+                            skipped=skipped, other=other,
+                            top_label=top_label, top_rows=top_rows)
 
 
 def process(file_bytes: bytes) -> tuple[bytes, GroupsalesResult]:

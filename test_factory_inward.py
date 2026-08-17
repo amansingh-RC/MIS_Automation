@@ -30,9 +30,18 @@ def make_input() -> bytes:
     data = [
         ("Royal Chain Private Limited", "PG-NA-24KT-YG", 100.0, 95.0),
         ("Royal Chain Private Limited", "G-NA-91.80-YG", 20.0, 18.0),
-        ("RC-REFINISHING", "G-NA-75.00-RG", 10.0, 7.0),
+        # heavy enough to rank 5th, but refinishing is excluded from the TOP 5
+        ("RC-REFINISHING", "G-NA-75.00-RG", 10.0, 11.0),
         ("RC-REFINISHING", "G-NA-80.00-YG", 3.0, 2.0),   # out of band -> OT
         ("UNKNOWN PARTY", "G-NA-91.80-YG", 5.0, 4.0),   # not in position table
+        ("ARK CHAINS", "PG-NA-24KT-YG", 80.0, 70.0),
+        ("TITAN", "G-NA-91.80-YG", 60.0, 55.0),
+        ("Aalishaan Jewels LLP", "G-NA-75.00-RG", 50.0, 45.0),
+        # big enough for 2nd place, but "reparing" parties never enter the TOP 5
+        ("REPARING-ARK CHAINS", "G-NA-91.80-YG", 90.0, 85.0),
+        # would rank 5th, but hallmarking is excluded too
+        ("QUALTIY ASSEY & HALLMARKS LLP", "G-NA-91.80-YG", 40.0, 35.0),
+        ("SHREE GANESH JEWELS", "PG-NA-24KT-YG", 12.0, 10.0),
     ]
     r = 13
     for party, var, net, pg in data:
@@ -56,10 +65,13 @@ def main():
 
     assert result.date_from == "24-06-2026", result.date_from
     assert result.skipped == 0, result.skipped        # OT row is kept, not skipped
-    assert result.unlisted == ["UNKNOWN PARTY"], result.unlisted
-    # grand: net 100+20+10+3+5 = 138 ; pg 95+18+7+2+4 = 126
-    assert abs(result.grand_net - 138.0) < 1e-9, result.grand_net
-    assert abs(result.grand_pg - 126.0) < 1e-9, result.grand_pg
+    assert result.unlisted == [
+        "Aalishaan Jewels LLP", "ARK CHAINS", "QUALTIY ASSEY & HALLMARKS LLP",
+        "REPARING-ARK CHAINS", "SHREE GANESH JEWELS", "TITAN",
+        "UNKNOWN PARTY"], result.unlisted
+    # grand: net 138+80+60+50+90+40+12 = 470 ; pg 130+70+55+45+85+35+10 = 430
+    assert abs(result.grand_net - 470.0) < 1e-9, result.grand_net
+    assert abs(result.grand_pg - 430.0) < 1e-9, result.grand_pg
     print("OK  dates, skipped, unlisted, grand totals")
 
     wb = openpyxl.load_workbook(io.BytesIO(out_bytes))
@@ -78,10 +90,11 @@ def main():
     assert abs(ws["D6"].value - 120.0) < 1e-9
     # RC-REFINISHING Sr.No 2
     assert ws["A7"].value == 2 and ws["B7"].value == "RC-REFINISHING"
-    # UNKNOWN PARTY unlisted -> placed after, numbered 3 (max listed 2 + 1)
+    # unlisted parties follow, alphabetically; UNKNOWN PARTY is last of 9
     rows = {ws.cell(row=r, column=2).value: ws.cell(row=r, column=1).value
             for r in range(4, ws.max_row + 1)}
-    assert rows.get("UNKNOWN PARTY") == 3, rows
+    assert rows.get("Aalishaan Jewels LLP") == 3, rows
+    assert rows.get("UNKNOWN PARTY") == 9, rows
     print("OK  position order, Sr. No., karat order, totals")
 
     # Grand total + karat summary block present
@@ -92,6 +105,37 @@ def main():
     # out-of-band karat kept as "OT"
     assert "OT" in {t[2] for t in flat if t[2]}, flat
     print("OK  grand total + karat summary block + OT")
+
+    # --- TOP 5 block on the right (G:I), ranked by Pg Wt --------------------
+    assert ws["G1"].value == "TOP 5"
+    assert ws["G1"].fill.fgColor.rgb == "00FFFF00", ws["G1"].fill.fgColor.rgb
+    assert [ws.cell(row=3, column=c).value for c in (7, 8, 9)] == \
+        ["Party Name", "Net Wt", "Pg Wt"]
+    top = [ws.cell(row=r, column=7).value for r in range(4, 9)]
+    assert top == ["Royal Chain Private Limited", "ARK CHAINS", "TITAN",
+                   "Aalishaan Jewels LLP", "SHREE GANESH JEWELS"], top
+    # reparing / refinishing / hallmarking parties are skipped even though
+    # each of them outranks SHREE GANESH JEWELS on Pg Wt
+    block = {ws.cell(row=r, column=7).value for r in range(4, 20)}
+    assert "REPARING-ARK CHAINS" not in block, block
+    assert "RC-REFINISHING" not in block, block
+    assert "QUALTIY ASSEY & HALLMARKS LLP" not in block, block
+    # the block's own total covers the five listed parties only
+    assert ws["G9"].value == "Grand Total"
+    assert abs(ws["H9"].value - 322.0) < 1e-9, ws["H9"].value
+    assert abs(ws["I9"].value - 293.0) < 1e-9, ws["I9"].value
+    # karat summary below it still covers everything, excluded parties included
+    assert [ws.cell(row=11, column=c).value for c in (7, 8, 9)] == \
+        ["KARAT", "Net Wt", "Pg Wt"]
+    karats = {ws.cell(row=r, column=7).value: ws.cell(row=r, column=8).value
+              for r in range(12, 16)}
+    assert list(karats) == ["24KT", "22KT", "18KT", "OT"], list(karats)
+    assert abs(karats["22KT"] - 215.0) < 1e-9, karats      # includes REPARING
+    assert ws["G16"].value == "Grand Total"
+    assert abs(ws["H16"].value - 470.0) < 1e-9, ws["H16"].value
+    assert abs(ws["I16"].value - 430.0) < 1e-9, ws["I16"].value
+    print("OK  TOP 5 block: Pg-Wt order, reparing/refinishing/hallmark "
+          "excluded, totals")
 
     # pivot only — no detail sheet
     assert wb.sheetnames == ["Factory Inward"], wb.sheetnames
