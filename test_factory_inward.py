@@ -2,7 +2,8 @@ import io
 
 import openpyxl
 
-from factory_inward import process, karat_from_variant
+from factory_inward import (default_positions, karat_from_variant,
+                            map_party_name, order_parties, process)
 from collections import OrderedDict
 
 
@@ -11,10 +12,50 @@ def test_variant_karat():
     assert karat_from_variant("G-NA-91.80-YG") == "22KT"
     assert karat_from_variant("PG-NA-99.50-YG") == "24KT"
     assert karat_from_variant("PG-NA-24KT-YG") == "24KT"     # literal fallback
+    assert karat_from_variant("G-NA-37.50-YG") == "9KT"
+    assert karat_from_variant("PG-NA-9KT-YG") == "9KT"       # literal 9KT
     assert karat_from_variant("G-NA-80.00-YG") is None       # out of band
     assert karat_from_variant("G-NA-80.00-YG", other="OT") == "OT"
     assert karat_from_variant("NO-KARAT-HERE", other="OT") is None  # no value
     print("OK  karat from variant (decimal % + literal NNKT + OT)")
+
+
+def test_bundled_order():
+    """Bundled table + name mapping: old export names get the report name and
+    land at its position; matching ignores case, spacing and "Reparing"."""
+    positions = default_positions()
+    assert len(positions) == 37, len(positions)
+    assert map_party_name("Royal Chain Private Limited") == "Royal Chain Limited"
+    assert map_party_name("rc-refinishing") == "Repairing - Royal Chain Limited"
+    assert map_party_name("REPARING - INDRAHEER GOLD") == \
+        "Repairing-Indraheer Gold"
+    # the position-sheet spelling resolves to the same report name
+    assert map_party_name("Reparing - Royal Chain Limited") == \
+        "Repairing - Royal Chain Limited"
+    assert map_party_name("TITAN") == "TITAN"                 # not mapped
+    export = ["SNEH-JAIN", "REPARING-INDRAHEER GOLD", "UNKNOWN PARTY", "TITAN",
+              "AJ-REFINISHING", "Royal Chain Private Limited",
+              "MALABAR GOLD AND DIAMONDS LIMITED REPARING", "RC-REFINISHING",
+              "REPARING-ARK CHAINS", "REPARING-DVM AQUA GOLD PRIVATE LIMITED",
+              "V-DIA JEWELS PRIVATE LIMITED REPAIRING", "ark chains"]
+    ordered, unlisted = order_parties([map_party_name(p) for p in export],
+                                      positions)
+    assert ordered == [
+        "Royal Chain Limited",                                # 1
+        "Repairing - Royal Chain Limited",                    # 2
+        "Repairing-Aalishaan Jewels",                         # 4
+        "ark chains",                                         # 5
+        "Repairing- ARK chains",                              # 6
+        "TITAN",                                              # 7
+        "Repairing - Malabar Gold And Diamonds Limited",      # 12
+        "Repairing-DVM Aqua Gold Private Limited",            # 14
+        "Repairing-Indraheer Gold",                           # 16
+        "V-DIA JEWELS PRIVATE LIMITED REPAIRING",             # 23
+        "SNEH-JAIN",                                          # 37
+        "UNKNOWN PARTY",                                      # not in table
+    ], ordered
+    assert unlisted == ["UNKNOWN PARTY"], unlisted
+    print("OK  bundled position table: 37 parties, name mapping, order")
 
 
 def make_input() -> bytes:
@@ -55,9 +96,40 @@ def make_input() -> bytes:
     return buf.getvalue()
 
 
+def test_9kt_rows():
+    """9KT rows get their own line after 14KT (before OT) and count in totals."""
+    wb = openpyxl.load_workbook(io.BytesIO(make_input()))
+    ws = wb.active
+    r = ws.max_row + 1
+    ws.cell(row=r, column=3, value="TITAN")
+    ws.cell(row=r, column=5, value="G-NA-37.50-YG")
+    ws.cell(row=r, column=6, value=7.0)
+    ws.cell(row=r, column=8, value=6.0)
+    buf = io.BytesIO()
+    wb.save(buf)
+    out_bytes, result = process(buf.getvalue(), gen_date="25-06-2026")
+    assert abs(result.grand_net - 477.0) < 1e-9, result.grand_net   # 470 + 7
+    ws = openpyxl.load_workbook(io.BytesIO(out_bytes)).active
+    titan = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=2).value == "TITAN")
+    assert [ws.cell(row=titan + i, column=3).value for i in (0, 1)] == \
+        ["22KT", "9KT"]
+    assert ws.cell(row=titan + 2, column=2).value == "TITAN Total"
+    assert abs(ws.cell(row=titan + 2, column=4).value - 67.0) < 1e-9
+    # karat summary block: 9KT sits between 18KT and OT
+    block = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=3).value == "KARAT")
+    karats = [ws.cell(row=r, column=3).value
+              for r in range(block + 1, block + 6)]
+    assert karats == ["24KT", "22KT", "18KT", "9KT", "OT"], karats
+    print("OK  9KT rows: own line after 14KT, before OT, counted in totals")
+
+
 def main():
     test_variant_karat()
-    # explicit position table: Royal Chain=1, RC-REFINISHING=2
+    test_bundled_order()
+    # explicit position table: Royal Chain=1, RC-REFINISHING=2 (export
+    # spellings — the sheet shows the mapped report names)
     positions = OrderedDict([("royal chain private limited", 1),
                              ("rc-refinishing", 2)])
     out_bytes, result = process(make_input(), positions=positions,
@@ -67,7 +139,7 @@ def main():
     assert result.skipped == 0, result.skipped        # OT row is kept, not skipped
     assert result.unlisted == [
         "Aalishaan Jewels LLP", "ARK CHAINS", "QUALTIY ASSEY & HALLMARKS LLP",
-        "REPARING-ARK CHAINS", "SHREE GANESH JEWELS", "TITAN",
+        "Repairing- ARK chains", "SHREE GANESH JEWELS", "TITAN",
         "UNKNOWN PARTY"], result.unlisted
     # grand: net 138+80+60+50+90+40+12 = 470 ; pg 130+70+55+45+85+35+10 = 430
     assert abs(result.grand_net - 470.0) < 1e-9, result.grand_net
@@ -84,12 +156,13 @@ def main():
         ["Sr. No.", "Party Name", "KARAT", "Net Wt", "Pg Wt"]
 
     # Royal Chain (Sr.No 1) first, karat order 24 then 22
-    assert ws["A4"].value == 1 and ws["B4"].value == "Royal Chain Private Limited"
+    assert ws["A4"].value == 1 and ws["B4"].value == "Royal Chain Limited"
     assert ws["C4"].value == "24KT" and ws["C5"].value == "22KT"
-    assert ws["B6"].value == "Royal Chain Private Limited Total"
+    assert ws["B6"].value == "Royal Chain Limited Total"
     assert abs(ws["D6"].value - 120.0) < 1e-9
-    # RC-REFINISHING Sr.No 2
-    assert ws["A7"].value == 2 and ws["B7"].value == "RC-REFINISHING"
+    # RC-REFINISHING Sr.No 2, under its report name
+    assert ws["A7"].value == 2 and \
+        ws["B7"].value == "Repairing - Royal Chain Limited"
     # unlisted parties follow, alphabetically; UNKNOWN PARTY is last of 9
     rows = {ws.cell(row=r, column=2).value: ws.cell(row=r, column=1).value
             for r in range(4, ws.max_row + 1)}
@@ -112,13 +185,13 @@ def main():
     assert [ws.cell(row=3, column=c).value for c in (7, 8, 9)] == \
         ["Party Name", "Net Wt", "Pg Wt"]
     top = [ws.cell(row=r, column=7).value for r in range(4, 9)]
-    assert top == ["Royal Chain Private Limited", "ARK CHAINS", "TITAN",
+    assert top == ["Royal Chain Limited", "ARK CHAINS", "TITAN",
                    "Aalishaan Jewels LLP", "SHREE GANESH JEWELS"], top
     # reparing / refinishing / hallmarking parties are skipped even though
     # each of them outranks SHREE GANESH JEWELS on Pg Wt
     block = {ws.cell(row=r, column=7).value for r in range(4, 20)}
-    assert "REPARING-ARK CHAINS" not in block, block
-    assert "RC-REFINISHING" not in block, block
+    assert "Repairing- ARK chains" not in block, block
+    assert "Repairing - Royal Chain Limited" not in block, block
     assert "QUALTIY ASSEY & HALLMARKS LLP" not in block, block
     # the block's own total covers the five listed parties only
     assert ws["G9"].value == "Grand Total"
@@ -140,6 +213,24 @@ def main():
     # pivot only — no detail sheet
     assert wb.sheetnames == ["Factory Inward"], wb.sheetnames
     print("OK  single pivot sheet (no detail sheet)")
+
+    # --- bundled table: parties follow the position-sheet order -------------
+    out2, res2 = process(make_input(), gen_date="25-06-2026")
+    ws2 = openpyxl.load_workbook(io.BytesIO(out2)).active
+    order = [(ws2.cell(row=r, column=1).value, ws2.cell(row=r, column=2).value)
+             for r in range(4, ws2.max_row + 1)
+             if ws2.cell(row=r, column=1).value is not None]
+    assert order == [
+        (1, "Royal Chain Limited"), (2, "Repairing - Royal Chain Limited"),
+        (3, "Aalishaan Jewels LLP"), (4, "ARK CHAINS"),
+        (5, "Repairing- ARK chains"), (6, "TITAN"),
+        (7, "QUALTIY ASSEY & HALLMARKS LLP"), (8, "SHREE GANESH JEWELS"),
+        (9, "UNKNOWN PARTY")], order
+    assert res2.unlisted == ["SHREE GANESH JEWELS", "UNKNOWN PARTY"], \
+        res2.unlisted
+    print("OK  bundled table: sheet in position order, serial Sr. No.")
+
+    test_9kt_rows()
     print("\nALL TESTS PASSED")
 
 

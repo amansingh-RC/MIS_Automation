@@ -16,8 +16,8 @@ from report_common import add_top_block, rank_top
 # "OT" (Other) trails the standard bands and captures any karat / melting value
 # that falls outside them — same convention as Factory Inward/Outward.
 _OTHER = "OT"
-_KARAT_ORDER = ["14KT", "18KT", "22KT", "24KT", _OTHER]
-_BANDS = {"24KT", "22KT", "18KT", "14KT"}
+_KARAT_ORDER = ["9KT", "14KT", "18KT", "22KT", "24KT", _OTHER]
+_BANDS = {"24KT", "22KT", "18KT", "14KT", "9KT"}
 
 
 def karat_from_melting(melting: float) -> str | None:
@@ -29,6 +29,8 @@ def karat_from_melting(melting: float) -> str | None:
         return "18KT"
     if 57.5 <= melting <= 59.8:
         return "14KT"
+    if 37.0 <= melting <= 38.0:
+        return "9KT"
     return None
 
 

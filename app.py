@@ -315,9 +315,10 @@ TOOLS = [
                     "with per-group and grand totals.",
         "help": "Karat is derived from Metal Fineness × 100 (fallback: Variant "
                 "Name): 24KT 99–100, 22KT 91–92.5, 18KT 74.5–76, 14KT "
-                "57.5–59.8. A karat / melting value outside these bands is "
-                "kept as **OT** (Other) instead of being dropped. Rows with a "
-                "blank Groupsales are grouped under \"(blank)\". A **TOP 5** "
+                "57.5–59.8, 9KT 37–38. A karat / melting value outside these "
+                "bands is kept as **OT** (Other) instead of being dropped. "
+                "Rows with a blank Groupsales are grouped under \"(blank)\". "
+                "A **TOP 5** "
                 "block (parties ranked by Pg Wt, plus a karat summary) sits on "
                 "the right-hand side of the sheet.",
         "add": add_groupsales_sheet, "preview": _preview_groupsales,
@@ -373,9 +374,10 @@ TOOLS = [
         "subtitle": "Raw GRN export → pivot of Sr. No. / Party Name / Karat / "
                     "Net Wt / Pg Wt, ordered by the party position table.",
         "help": "Karat comes from the Variant Name (decimal melting %, else a "
-                "literal NNKT). Parties are ordered by the position table and "
-                "numbered serially (1, 2, 3…); parties not in the table go to "
-                "the end. Includes a karat-only summary block, plus a **TOP 5** "
+                "literal NNKT). Old export party names are renamed first (e.g. "
+                "RC-REFINISHING → Repairing - Royal Chain Limited). Parties are "
+                "ordered by the position table and numbered serially (1, 2, "
+                "3…); parties not in the table go to the end. Includes a karat-only summary block, plus a **TOP 5** "
                 "block on the right (parties by Pg Wt; *reparing*, "
                 "*refinishing* and hallmarking accounts are not ranked).",
         "add": _add_factory_inward, "preview": _preview_factory,
@@ -403,8 +405,9 @@ TOOLS = [
                 "from the Variant Name, out-of-band = OT) without the pivot, "
                 "then are merged. **24KT → 24KT-METAL**. **Remark**: inward + "
                 "24KT = Metal (Receipt Metal), outward + 24KT = Issue Metal, "
-                "outward + other = Issue, inward + other = Return. Parties are "
-                "ordered by the position table. **Net Goods** = Issue − "
+                "outward + other = Issue, inward + other = Return. Old export "
+                "party names are renamed first, and parties are ordered by the "
+                "position table. **Net Goods** = Issue − "
                 "Return; **Return %** = Return ÷ Issue (Net and Pg).",
         "render": render_return_summary, "preview": _preview_return_summary,
     },

@@ -15,8 +15,22 @@ from loss_report import LossReportError, _grid_from_bytes, to_number
 from report_common import add_top_block, rank_top
 
 _POSITIONS_PATH = Path(__file__).parent / "assets" / "party_positions.xlsx"
-# "OT" (Other) captures any karat value outside the four standard bands.
-_KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT", "OT"]
+# "OT" (Other) captures any karat value outside the standard bands.
+_KARAT_ORDER = ["24KT", "22KT", "18KT", "14KT", "9KT", "OT"]
+
+# Export party name -> the name shown in the report (and looked up in the
+# position table). Matched with party_key, so case / spacing don't matter.
+PARTY_NAME_MAP = {
+    "Royal Chain Private Limited": "Royal Chain Limited",
+    "RC-REFINISHING": "Repairing - Royal Chain Limited",
+    "AJ-REFINISHING": "Repairing-Aalishaan Jewels",
+    "REPARING-ARK CHAINS": "Repairing- ARK chains",
+    "MALABAR GOLD AND DIAMONDS LIMITED REPARING":
+        "Repairing - Malabar Gold And Diamonds Limited",
+    "REPARING-DVM AQUA GOLD PRIVATE LIMITED":
+        "Repairing-DVM Aqua Gold Private Limited",
+    "REPARING-INDRAHEER GOLD": "Repairing-Indraheer Gold",
+}
 
 
 @dataclass
@@ -66,6 +80,47 @@ def default_positions() -> "OrderedDict[str, int]":
         return load_positions(_POSITIONS_PATH.read_bytes())
     except OSError:
         return OrderedDict()
+
+
+def party_key(name) -> str:
+    """Comparison key for party names: ignores case, spaces and punctuation,
+    and reads the export's "Reparing" spelling as "Repairing"."""
+    key = re.sub(r"[^0-9a-z]", "", str(name).casefold())
+    return key.replace("reparing", "repairing")
+
+
+# Both the export spelling and the report spelling resolve to the report name.
+_NAME_BY_KEY = {party_key(name): new
+                for old, new in PARTY_NAME_MAP.items() for name in (old, new)}
+
+
+def map_party_name(name: str) -> str:
+    """The report name for an export party name (unchanged when not mapped)."""
+    return _NAME_BY_KEY.get(party_key(name), name)
+
+
+def order_parties(parties, positions) -> tuple[list[str], list[str]]:
+    """Order parties by the position table (Position, then name); parties not
+    in the table follow alphabetically. Returns (ordered, unlisted).
+
+    Table names go through :func:`map_party_name` too, so a table may use
+    either the export or the report spelling of a party.
+    """
+    pos_by_key: dict[str, int] = {}
+    for name, pos in positions.items():
+        key = party_key(map_party_name(name))
+        if key:
+            pos_by_key[key] = min(pos, pos_by_key.get(key, pos))
+    listed, unlisted = [], []
+    for p in parties:
+        pos = pos_by_key.get(party_key(p))
+        if pos is None:
+            unlisted.append(p)
+        else:
+            listed.append((pos, p))
+    listed.sort(key=lambda x: (x[0], x[1].casefold()))
+    unlisted.sort(key=str.casefold)
+    return [p for _, p in listed] + unlisted, unlisted
 
 _THIN = Side(style="thin", color="000000")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
@@ -144,6 +199,7 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
         party = "" if cell(row, pc) is None else str(cell(row, pc)).strip()
         if not party or party.lower().startswith("grand"):
             continue
+        party = map_party_name(party)
         # Out-of-band karats are kept as "OT"; only rows with no karat value
         # at all are skipped.
         karat = karat_from_variant(cell(row, vc), other="OT")
@@ -159,11 +215,7 @@ def add_factory_inward_sheet(wb: openpyxl.Workbook, file_bytes: bytes,
         raise LossReportError("Factory Inward: no usable data rows found.")
 
     # --- order parties by position table, then number Sr. No. serially ------
-    listed = [(positions[p.lower()], p) for p in agg if p.lower() in positions]
-    listed.sort(key=lambda x: (x[0], x[1].casefold()))
-    unlisted = sorted((p for p in agg if p.lower() not in positions),
-                      key=str.casefold)
-    ordered_parties = [p for _, p in listed] + unlisted
+    ordered_parties, unlisted = order_parties(agg, positions)
     ordered = [(i, p) for i, p in enumerate(ordered_parties, start=1)]
 
     date_from, date_to = _extract_dates(grid)

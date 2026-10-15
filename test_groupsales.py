@@ -10,6 +10,9 @@ def test_karat_bands():
     assert karat_from_melting(91.8) == "22KT"
     assert karat_from_melting(75.0) == "18KT"
     assert karat_from_melting(58.5) == "14KT"
+    assert karat_from_melting(37.5) == "9KT"
+    assert karat_from_melting(37.0) == "9KT" and karat_from_melting(38.0) == "9KT"
+    assert karat_from_melting(36.9) is None and karat_from_melting(38.1) is None
     assert karat_from_melting(80.0) is None
     print("OK  karat bands")
 
@@ -68,6 +71,31 @@ def test_top5_without_party_column():
     assert [ws.cell(row=r, column=6).value for r in range(4, 9)] == \
         ["CUBAN", "(blank)", "ZETA", "ALPHA", "GAMMA"]
     print("OK  TOP 5 falls back to Groupsales when Party Name is absent")
+
+
+def test_9kt_band():
+    """A 9KT row (melting 37–38) gets its own line, first in ascending order,
+    and counts towards the totals."""
+    wb = openpyxl.load_workbook(io.BytesIO(make_input()))
+    ws = wb.active
+    r = ws.max_row + 1
+    ws.cell(row=r, column=23, value="CUBAN")
+    ws.cell(row=r, column=3, value="ROYAL CHAIN")
+    ws.cell(row=r, column=14, value="G-NA-37.50-YG")
+    ws.cell(row=r, column=15, value=4.0)
+    ws.cell(row=r, column=16, value=3.0)
+    buf = io.BytesIO()
+    wb.save(buf)
+    out_bytes, result = process(buf.getvalue())
+    assert abs(result.grand_net - 227.0) < 1e-9, result.grand_net   # 223 + 4
+    ws = openpyxl.load_workbook(io.BytesIO(out_bytes)).active
+    assert [ws.cell(row=r, column=2).value for r in (4, 5, 6)] == \
+        ["9KT", "18KT", "22KT"]
+    assert ws["A7"].value == "CUBAN Total"
+    assert abs(ws["C7"].value - 124.0) < 1e-9, ws["C7"].value
+    # karat summary under the TOP 5 block starts with 9KT
+    assert ws["F12"].value == "9KT", ws["F12"].value
+    print("OK  9KT band: own line, ascending order, counted in totals")
 
 
 def main():
@@ -184,6 +212,7 @@ def main():
     print("OK  single pivot sheet (no detail sheet)")
 
     test_top5_without_party_column()
+    test_9kt_band()
     print("\nALL TESTS PASSED")
 
 

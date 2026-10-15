@@ -9,13 +9,14 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.styles.colors import Color
 from openpyxl.utils import get_column_letter
 
-from factory_inward import default_positions, load_positions  # noqa: F401
+from factory_inward import (default_positions, load_positions,  # noqa: F401
+                            map_party_name, order_parties)
 from groupsales import karat_from_variant
 from loss_report import LossReportError, _grid_from_bytes, to_number
 
 # Karat display order (reference pivot orders them this way: OT, then the
 # 24KT metal band, then descending karats).
-_KARAT_ORDER = ["OT", "24KT-METAL", "22KT", "18KT", "14KT"]
+_KARAT_ORDER = ["OT", "24KT-METAL", "22KT", "18KT", "14KT", "9KT"]
 
 # Output categories (final-report header, source remark) in column order.
 _CATEGORIES = [
@@ -108,6 +109,7 @@ def _parse_file(file_bytes: bytes, is_inward: bool, agg: dict,
         party = "" if cell(row, pc) is None else str(cell(row, pc)).strip()
         if not party or party.lower().startswith(("grand", "total")):
             continue
+        party = map_party_name(party)
         karat = karat_from_variant(cell(row, vc), other="OT")
         if karat is None:
             continue
@@ -125,17 +127,6 @@ def _parse_file(file_bytes: bytes, is_inward: bool, agg: dict,
         pair[1] += pg
 
     return _extract_dates(grid)
-
-
-def _order_parties(parties, positions):
-    """Position-table order (like Factory Inward): listed by position then name,
-    unlisted alphabetically at the end."""
-    listed = [(positions[p.lower()], p) for p in parties
-              if p.lower() in positions]
-    listed.sort(key=lambda x: (x[0], x[1].casefold()))
-    unlisted = sorted((p for p in parties if p.lower() not in positions),
-                      key=str.casefold)
-    return [p for _, p in listed] + unlisted, unlisted
 
 
 def _karats_for(party_agg) -> list[str]:
@@ -161,7 +152,7 @@ def add_return_summary_sheet(wb: openpyxl.Workbook, inward_bytes: bytes,
     date_from = df_out or df_in
     date_to = dt_out or dt_in
 
-    ordered_parties, unlisted = _order_parties(parties, positions)
+    ordered_parties, unlisted = order_parties(parties, positions)
 
     ws = wb.create_sheet("RETURN % SUMMARY")
     last_letter = get_column_letter(_N_COLS)

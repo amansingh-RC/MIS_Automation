@@ -40,6 +40,32 @@ def _positions():
     return OrderedDict([("royal chain private limited", 1), ("alpha", 2)])
 
 
+def test_bundled_order():
+    """Bundled position table: parties (old export names mapped) are listed
+    in the position-sheet order, unknown parties last."""
+    inward = _make_raw([
+        ("G1", "TITAN", "G-NA-91.70-YG", 5.0, 4.0),
+        ("G2", "Zeta Unknown", "G-NA-91.70-YG", 1.0, 1.0),
+        ("G3", "RC-REFINISHING", "G-NA-91.70-YG", 2.0, 2.0),
+        ("G4", "TITAN", "G-NA-37.50-YG", 1.0, 1.0),          # 9KT
+    ], "GOODS RECEIPT NOTE")
+    outward = _make_raw([
+        ("I1", "Royal Chain Private Limited", "G-NA-91.70-YG", 9.0, 8.0),
+        ("I2", "TITAN", "G-NA-91.70-YG", 50.0, 45.0),
+    ], "INV")
+    out_bytes, res = process(inward, outward)
+    ws = openpyxl.load_workbook(io.BytesIO(out_bytes)).active
+    names = [ws.cell(row=r, column=1).value for r in range(5, ws.max_row + 1)]
+    order = [n for n in names if n and not n.endswith("Total")]
+    assert order == ["Royal Chain Limited", "Repairing - Royal Chain Limited",
+                     "TITAN", "Zeta Unknown"], order
+    assert res.unlisted == ["Zeta Unknown"], res.unlisted
+    titan = names.index("TITAN") + 5
+    assert [ws.cell(row=titan + i, column=2).value for i in (0, 1)] == \
+        ["22KT", "9KT"]
+    print("OK  bundled table: position-sheet order, mapped party names, 9KT")
+
+
 def main():
     # Inward (GRN): a 24KT metal receipt + a 22KT return.
     inward = _make_raw([
@@ -111,6 +137,8 @@ def main():
               if ws.cell(row=r, column=1).value == "Grand Total")
     assert abs(ws.cell(row=gt, column=7).value - 250.0) < 1e-9
     print("OK  grand total row")
+
+    test_bundled_order()
     print("\nALL TESTS PASSED")
 
 

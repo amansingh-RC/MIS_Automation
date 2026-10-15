@@ -51,13 +51,13 @@ def main():
         ws["A1"].value
     assert [ws.cell(row=3, column=c).value for c in range(1, 6)] == \
         ["Sr. No.", "Party Name", "KARAT", "Net Wt", "Pg Wt"]
-    # serial Sr. No. in position order; unlisted last
-    assert ws["A4"].value == 1 and ws["B4"].value == "Royal Chain Private Limited"
+    # serial Sr. No. in position order (export names shown mapped); unlisted last
+    assert ws["A4"].value == 1 and ws["B4"].value == "Royal Chain Limited"
     srnos = {ws.cell(row=r, column=2).value: ws.cell(row=r, column=1).value
              for r in range(4, ws.max_row + 1)}
-    assert srnos.get("Royal Chain Private Limited") == 1, srnos
-    assert srnos.get("RC-REFINISHING") == 2, srnos
-    assert srnos.get("REPARING-ARK CHAINS") == 3, srnos
+    assert srnos.get("Royal Chain Limited") == 1, srnos
+    assert srnos.get("Repairing - Royal Chain Limited") == 2, srnos
+    assert srnos.get("Repairing- ARK chains") == 3, srnos
     assert srnos.get("UNKNOWN PARTY") == 4, srnos
     # 100+10+5+5+200
     assert abs(result.grand_net - 320.0) < 1e-9, result.grand_net
@@ -71,11 +71,11 @@ def main():
     # and UNKNOWN PARTY are left once reparing + refinishing are dropped
     assert ws["G1"].value == "TOP 5"
     top = [ws.cell(row=r, column=7).value for r in range(4, 6)]
-    assert top == ["Royal Chain Private Limited", "UNKNOWN PARTY"], top
+    assert top == ["Royal Chain Limited", "UNKNOWN PARTY"], top
     assert ws["G6"].value == "Grand Total", ws["G6"].value
     names = [r["Party Name"] for r in result.top_rows]
-    assert "REPARING-ARK CHAINS" not in names, names
-    assert "RC-REFINISHING" not in names, names
+    assert "Repairing- ARK chains" not in names, names
+    assert "Repairing - Royal Chain Limited" not in names, names
     print("OK  outward: TOP 5 block, reparing + refinishing parties excluded")
 
     # Falls back to the default trans type when the preamble lacks it.
